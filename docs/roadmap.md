@@ -37,22 +37,18 @@ write time, no partial-failure semantics, no batch concept.
 | Resource | Store wildcard | API accepts `*` | UI accepts `*` | Runtime sync on change |
 | --- | --- | --- | --- | --- |
 | Skills | ✅ | ✅ | ✅ | ✅ `syncAffectedAgentSkillMounts` |
-| MCP servers | ✅ | ✅ | ✅ | ❌ **bug** |
+| MCP servers | ✅ | ✅ | ✅ | ✅ `runner.reloadMcpServers()` |
 | Schedules | ❌ per-agent only | n/a | n/a | n/a |
 | Channels | n/a (each adapter holds its own token/identity — wildcard not meaningful) | — | — | — |
 
 **Concrete work for M1.1:**
 
-- **Fix MCP runtime sync.** `apps/agent/src/agent-runner.ts:1282` only calls
-  `mcpClientManager.connectAll` when the manager is `undefined`. After a
-  wildcard enable, running agents do not pick up the new server until
-  restart. Mirror the skills hook: when an MCP assignment is added/removed,
-  disconnect the manager and reconnect against the fresh `listEnabled`
-  result. Wire it into the gateway endpoints
-  (`/api/admin/mcp-servers/:id/enable` and `/disable`).
-- **Document the convention.** Add a section to `docs/storage-model.md`
-  formalizing `agent_id = '*'` as the wildcard idiom and listing which
-  resources support it.
+- ✅ **MCP runtime sync** — `AgentRunner.reloadMcpServers()` now
+  disconnects and reconnects against the fresh `listEnabled` result;
+  the gateway endpoints (`/api/admin/mcp-servers/:id/enable` and
+  `/disable`) call it on running agents.
+- ✅ **Wildcard convention** — `docs/storage-model.md` documents
+  `agent_id = '*'` and lists resources that honor it.
 
 **Out of M1.1 (intentionally):**
 

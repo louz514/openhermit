@@ -20,4 +20,4 @@ Built-in channels are implemented. External adapters can use channel tokens and 
 
 ## Observability
 
-Gateway logs and stats exist. Open questions remain around metrics, traces, per-agent health history, and failure alerting.
+Gateway logs, stats, and Prometheus metrics on `/metrics` exist (per-agent turn counts, latency histograms, token counts, tool calls, errors, inbound message counts). Open questions remain around traces, per-agent health history, and failure alerting.

@@ -115,11 +115,32 @@ Flags on `create`:
 | `--name <name>` | Display name (defaults to the agentId). |
 | `--workspace-dir <path>` | Custom workspace directory. |
 | `--owner <userId>` | Assign an owner at creation time. |
+| `--sandbox <preset>` | Sandbox preset to provision (default: gateway's `autoProvisionSandbox`). |
+| `--no-sandbox` | Skip sandbox provisioning entirely. |
 
 ```bash
 hermit agents create oncall --name "On-Call Buddy" --owner user_marcus
 hermit agents start oncall
 hermit agents list
+```
+
+---
+
+## `hermit sandbox`
+
+Manage an agent's sandboxes (execution environments). See [`sandbox-model.md`](./sandbox-model.md) for the full model.
+
+| Subcommand | Description |
+|------------|-------------|
+| `sandbox list` | List sandboxes for an agent (`--agent <id>` required). |
+| `sandbox add` | Create a sandbox. Requires `--agent <id>` and `--type <host\|docker\|e2b\|daytona>`. Optional `--alias <alias>` (default `default`) and `--config <json>`. |
+| `sandbox remove <alias>` | Soft-delete a sandbox by alias. Requires `--agent <id>`. |
+
+```bash
+hermit sandbox list --agent main
+hermit sandbox add --agent main --type docker --config '{"image":"ubuntu:24.04"}'
+hermit sandbox add --agent devops --type host --alias default
+hermit sandbox remove --agent main default
 ```
 
 ---

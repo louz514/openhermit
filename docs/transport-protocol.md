@@ -10,7 +10,7 @@ The gateway exposes agent execution under `/api/agents/{agentId}`. All agent rou
 | User JWT | `POST /api/auth/token` | browser/web user auth (identifies a person, not an agent) |
 | Channel bearer | generated or configured channel token | built-in/external channel adapters scoped to an agent/channel namespace |
 
-Protected agents require `agent_token` during device-token exchange.
+`protected` agents require `agent_token` during device-token exchange (members self-join). `private` agents reject any sender without an explicit membership row at session-open time.
 
 ## Agent Routes
 
@@ -213,6 +213,9 @@ Owner or admin routes:
 - `/api/agents/{agentId}/mcp-servers`
 - `/api/agents/{agentId}/channels`
 - `/api/agents/{agentId}/schedules`
+- `/api/agents/{agentId}/sandboxes` — list / add / remove sandbox rows. See [sandbox-model.md](sandbox-model.md).
+- `/api/agents/{agentId}/members` — list / add / remove memberships. See [user-model.md](user-model.md#adding-members).
+- `/api/agents/{agentId}/security` — read / overwrite the agent security policy (`access`, autonomy, approvals).
 - `/api/agents/{agentId}/instructions` — CRUD on per-agent system-prompt sections (owner or admin)
 
 Admin fan-out:
@@ -226,6 +229,7 @@ Admin routes:
 - `/api/admin/skills`
 - `/api/admin/mcp-servers`
 - `/api/admin/schedules`
+- `/api/sandbox-presets` — read-only registry of sandbox presets defined in `gateway.json` (any authenticated user)
 
 See the focused docs for payload details:
 

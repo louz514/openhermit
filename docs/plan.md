@@ -11,12 +11,12 @@ This roadmap reflects the current implementation after the gateway, schedules, s
 - durable sessions and session events
 - user identities, roles, merges, and role-based tool filtering
 - memory tools, working memory, introspection, and context compaction
-- Docker, host, and E2B exec backends
+- Docker, host, E2B, and Daytona exec backends, with sandboxes as first-class rows + presets
 - web search/fetch providers
 - cron/once scheduler with run history
 - Telegram, Discord, and Slack built-in adapters
 - runtime channel enable/disable/config management
-- skills registry, assignments, prompt index, and skill mounts
+- skills registry, assignments, prompt index, and per-backend skill sync
 - MCP server registry, assignments, runtime status, and namespaced tools
 - HTTP sync, inline SSE streaming, durable SSE, and WebSocket RPC/event subscriptions
 
@@ -42,5 +42,4 @@ This roadmap reflects the current implementation after the gateway, schedules, s
 
 - preserving legacy single-agent process compatibility
 - adding new database backends
-- adding a plugin framework separate from current skills, MCP, and channel packages
 - treating workspace files as durable internal state

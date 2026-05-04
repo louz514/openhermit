@@ -13,8 +13,8 @@ Gateway (Hono HTTP + WebSocket, auth, admin UI)
           v
 AgentInstanceManager
           |
-          +-- AgentRunner(agent A) -> exec backend -> docker / host shell / e2b sandbox
-          +-- AgentRunner(agent B) -> exec backend -> docker / host shell / e2b sandbox
+          +-- AgentRunner(agent A) -> exec backend -> docker / host / e2b / daytona
+          +-- AgentRunner(agent B) -> exec backend -> docker / host / e2b / daytona
           |
           v
 PostgreSQL stores (Drizzle)
@@ -44,7 +44,7 @@ OpenHermit keeps internal runtime state separate from external task state.
 - long-term memories
 - instructions
 - users, roles, identities, and merges
-- container runtime inventory
+- sandbox rows (per-agent execution environments) and their runtime state
 - skills and skill assignments
 - MCP server definitions and assignments
 - schedules and schedule runs
@@ -113,17 +113,18 @@ The main model loop is backed by `@mariozechner/pi-agent-core` and `@mariozechne
 
 ## Execution Backends
 
-The `exec` tool uses `ExecBackendManager`.
+The `exec` tool uses `ExecBackendManager`, built from the agent's rows in the `sandboxes` table (see [`sandbox-model.md`](./sandbox-model.md)).
 
 Supported backend types:
 
-- `docker`: starts a per-agent workspace container through `DockerContainerManager`
-- `host`: runs commands on the host in a configured working directory
-- `e2b`: runs commands in a per-agent E2B cloud sandbox
+- `docker`: per-agent workspace container managed by the gateway
+- `host`: runs commands on the gateway host (devops-only — see sandbox-model.md)
+- `e2b`: runs commands in a per-agent [E2B](https://e2b.dev) cloud sandbox
+- `daytona`: runs commands in a per-agent [Daytona](https://www.daytona.io) cloud sandbox
 
-If no exec config exists, the runner creates a host backend. Agent creation through the gateway writes a Docker backend by default.
+Agents created through the gateway use the preset named by `autoProvisionSandbox` in `gateway.json` (default: `docker-ubuntu`); pass `sandbox: "<preset>"` or `null` on `POST /api/agents` to override.
 
-Container lifecycle supports:
+Sandbox lifecycle (per backend) supports:
 
 - start: `ondemand` or `session`
 - stop: `idle` or `session`
@@ -137,12 +138,12 @@ Admin APIs require `GATEWAY_ADMIN_TOKEN`. Agent routes use a resolver that accep
 - browser/device JWTs issued by `POST /api/auth/token` (user-global; the JWT identifies a person, not an agent)
 - channel bearer tokens registered for built-in or external channel adapters
 
-Agent access can be `public` or `protected`. Protected agents require the agent access token during device-token exchange.
+Agent access can be `public`, `protected`, or `private`. `protected` requires the agent access token during device-token exchange (members self-join via `/members`); `private` rejects anyone without an explicit membership row at session-open time. See [`sandbox-model.md`](./sandbox-model.md) for the full policy.
 
 ## Extension Surfaces
 
 - **Tools:** built-in toolsets plus dynamically connected MCP tools
-- **Skills:** prompt instructions and supporting files, registered in DB and mounted read-only
+- **Skills:** prompt instructions and supporting files, registered in DB and synced into each backend's sandbox via `runner.syncSkills`
 - **Channels:** Telegram, Discord, Slack built-ins plus channel-token support for external adapters
 - **Schedules:** cron/once jobs that post prompts into dedicated or configured sessions
 - **Web providers:** Defuddle, Exa, Tavily

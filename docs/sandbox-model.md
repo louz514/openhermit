@@ -171,7 +171,7 @@ Soft-deleting a sandbox row (via DELETE) does **not** automatically tear down th
 
 ## Security Policy
 
-The security policy (in the `agent_configs.security_json` column, managed via `PUT /api/agents/:id/security` or `hermit config security`) is a separate concern from the sandbox: the sandbox decides **where** commands run; the security policy decides **who can talk to the agent** and **when commands need approval**.
+The security policy (in the `agents.security_json` column, managed via `PUT /api/agents/:id/security` or `hermit config security`) is a separate concern from the sandbox: the sandbox decides **where** commands run; the security policy decides **who can talk to the agent** and **when commands need approval**.
 
 ```json
 {

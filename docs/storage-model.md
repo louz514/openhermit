@@ -22,7 +22,7 @@ Agent-scoped tables:
 - `sessions`
 - `session_events`
 - `memories`
-- `containers`
+- `sandboxes`
 - `instructions`
 - `user_agents`
 - `agent_skills`
@@ -40,7 +40,7 @@ Agent-scoped tables:
 | `sessions` | Durable session index: source, metadata, status, participants, descriptions, working memory |
 | `session_events` | Full persisted event log for messages, tool calls/results, errors, and introspection |
 | `memories` | Long-term memories keyed by `memory_key` |
-| `containers` | Workspace container runtime inventory |
+| `sandboxes` | Per-agent execution environments (host / docker / e2b / daytona) with lifecycle (`pending` → `provisioned` → `deleted`), `external_id`, and backend-private `runtime_state`. See [`sandbox-model.md`](./sandbox-model.md). |
 | `instructions` | Prompt instructions by key, scoped to a single agent. Each new agent is seeded with `identity`, `soul`, `rules`. Owners edit their own; admin "append" fans out to every agent's row. |
 | `users` | User records and merge links |
 | `user_agents` | User role per agent |

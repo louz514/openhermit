@@ -25,11 +25,11 @@ The name and description form the always-visible skill index. The full body is r
 
 ## Sources
 
-| Source | Location | Mount |
-|--------|----------|-------|
-| Built-in/platform | host path registered in `skills` table | read-only under `/skills/{id}` |
-| Per-agent assignment | same skill library, assigned in `agent_skills` | read-only under `/skills/{id}` |
-| Workspace-installed | `/workspace/.openhermit/skills/{id}` | normal workspace files |
+| Source | Location | Where the agent sees it |
+|--------|----------|-------------------------|
+| Built-in / platform | host path registered in `skills` table | `<agent_home>/.openhermit/skills/system/{id}` (synced by the backend) |
+| Per-agent assignment | same skill library, assigned in `agent_skills` | `<agent_home>/.openhermit/skills/system/{id}` (synced by the backend) |
+| Workspace-installed | `<workspace>/.openhermit/skills/{id}` (under the workspace dir, not `system/`) | normal workspace files |
 
 The gateway scans repository `skills/` at startup and upserts those built-ins into the DB when `skillStore` is available.
 
