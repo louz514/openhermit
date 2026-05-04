@@ -1,5 +1,13 @@
 # E2B Backend Design For OpenHermit
 
+> **Historical design document.** Written 2026-05-02 before the E2B backend
+> shipped. Most decisions in this document are reflected in the current
+> implementation, but for the authoritative current model — including the
+> Daytona backend that landed alongside E2B, sandbox rows in the DB, and
+> the per-backend skill-sync layout (skills live at
+> `<agent_home>/.openhermit/skills/system/`, not `/skills`) — see
+> [`sandbox-model.md`](./sandbox-model.md).
+
 This document proposes an `e2b` exec backend for OpenHermit.
 
 Date: 2026-05-02

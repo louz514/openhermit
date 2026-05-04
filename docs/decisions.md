@@ -8,7 +8,7 @@ OpenHermit optimizes for hosted multi-agent operation instead of a single local 
 
 ## ADR-001: Internal State Is Outside The Workspace
 
-Conversation history, memories, instructions, users, schedules, skills, MCP assignments, and container inventory are internal state. They live in PostgreSQL, scoped by `agent_id` where applicable.
+Conversation history, memories, instructions, users, schedules, skills, MCP assignments, and sandbox rows (per-agent execution environments) are internal state. They live in PostgreSQL, scoped by `agent_id` where applicable.
 
 The workspace is external task state: user files, generated artifacts, repositories, and mounted data.
 
@@ -44,7 +44,7 @@ Scheduling is a first-class subsystem with cron and one-shot schedules. Schedule
 
 ## ADR-008: Skills Are Prompt Assets, MCP Servers Are Tool Providers
 
-Skills are directories containing `SKILL.md` and optional supporting files. They are indexed in the prompt and mounted into exec backends.
+Skills are directories containing `SKILL.md` and optional supporting files. They are indexed in the prompt and synced into each exec backend's sandbox at `<agent_home>/.openhermit/skills/system/` via `runner.syncSkills`.
 
 MCP servers are executable external tool providers. Their tools are discovered at runtime and exposed as namespaced `mcp__{serverId}__{toolName}` tools.
 
@@ -56,4 +56,4 @@ Adapters use the OpenHermit SDK over gateway agent routes instead of reaching in
 
 ## ADR-010: Execution Backends Are Pluggable
 
-The `exec` tool runs through an `ExecBackendManager`. Docker, host shell, and E2B sandbox backends are currently implemented. Gateway-created agents default to Docker; missing config falls back to host shell for development and tests.
+The `exec` tool runs through an `ExecBackendManager`, built from per-agent rows in the `sandboxes` table. Four backends are implemented: `docker`, `host`, `e2b`, and `daytona`. Gateway-created agents auto-provision a sandbox from the preset named by `autoProvisionSandbox` in `gateway.json` (default: `docker-ubuntu`); the `host` backend is reserved for the privileged "devops" agent (see [`sandbox-model.md`](./sandbox-model.md)).
