@@ -126,6 +126,7 @@ export const memories = pgTable('memories', {
   memoryKey: text('memory_key').notNull(),
   content: text('content').notNull(),
   metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
+  grants: jsonb('grants').$type<unknown[]>().default([]).notNull(),
   createdAt: text('created_at').default('').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [

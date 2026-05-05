@@ -39,6 +39,7 @@ const READONLY_BLOCKED_TOOLS = new Set([
   'schedule_update',
   'schedule_delete',
   'schedule_trigger',
+  'memory_set_grants',
   'policy_set',
   'policy_delete',
 ]);

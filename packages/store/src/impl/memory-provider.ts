@@ -43,20 +43,22 @@ export class DbMemoryProvider implements MemoryProvider {
     const id = input.id?.trim() || `mem-${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
     const metadata = (input.metadata ?? {}) as Record<string, unknown>;
+    const grants = input.grants ?? [];
 
     await this.db.insert(memories).values({
       agentId: scope.agentId,
       memoryKey: id,
       content: input.content,
       metadata,
+      grants,
       createdAt: now,
       updatedAt: now,
     }).onConflictDoUpdate({
       target: [memories.agentId, memories.memoryKey],
-      set: { content: input.content, metadata, updatedAt: now },
+      set: { content: input.content, metadata, grants, updatedAt: now },
     });
 
-    return { id, content: input.content, metadata: input.metadata ?? {}, createdAt: now, updatedAt: now };
+    return { id, content: input.content, metadata: input.metadata ?? {}, grants, createdAt: now, updatedAt: now };
   }
 
   async search(scope: StoreScope, query: string, options?: MemorySearchOptions): Promise<MemoryEntry[]> {
@@ -70,6 +72,7 @@ export class DbMemoryProvider implements MemoryProvider {
       memory_key: string;
       content: string;
       metadata: unknown;
+      grants: unknown;
       created_at: string;
       updated_at: string;
     };
@@ -78,6 +81,7 @@ export class DbMemoryProvider implements MemoryProvider {
       id: row.memory_key,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      grants: (Array.isArray(row.grants) ? row.grants : []) as unknown[],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });
@@ -96,7 +100,7 @@ export class DbMemoryProvider implements MemoryProvider {
     if (this.ftsReady) {
       try {
         const fts = await this.db.execute<MemRow>(sql`
-          SELECT m.memory_key, m.content, m.metadata, m.created_at, m.updated_at
+          SELECT m.memory_key, m.content, m.metadata, m.grants, m.created_at, m.updated_at
           FROM memories m
           WHERE m.agent_id = ${scope.agentId}
             AND m.content_tsv @@ plainto_tsquery('english', ${trimmed})
@@ -128,7 +132,7 @@ export class DbMemoryProvider implements MemoryProvider {
         if (excludeKeys.length > 0) {
           const notIn = excludeKeys.map(k => sql`${k}`).reduce((a, b) => sql`${a}, ${b}`);
           ilike = await this.db.execute<MemRow>(sql`
-            SELECT m.memory_key, m.content, m.metadata, m.created_at, m.updated_at,
+            SELECT m.memory_key, m.content, m.metadata, m.grants, m.created_at, m.updated_at,
               (${words.map(w => {
                 const p = `%${w}%`;
                 return sql`(CASE WHEN m.memory_key ILIKE ${p} OR m.content ILIKE ${p} THEN 1 ELSE 0 END)`;
@@ -142,7 +146,7 @@ export class DbMemoryProvider implements MemoryProvider {
           `);
         } else {
           ilike = await this.db.execute<MemRow>(sql`
-            SELECT m.memory_key, m.content, m.metadata, m.created_at, m.updated_at,
+            SELECT m.memory_key, m.content, m.metadata, m.grants, m.created_at, m.updated_at,
               (${words.map(w => {
                 const p = `%${w}%`;
                 return sql`(CASE WHEN m.memory_key ILIKE ${p} OR m.content ILIKE ${p} THEN 1 ELSE 0 END)`;
@@ -168,10 +172,11 @@ export class DbMemoryProvider implements MemoryProvider {
       memory_key: string;
       content: string;
       metadata: unknown;
+      grants: unknown;
       created_at: string;
       updated_at: string;
     }>(sql`
-      SELECT memory_key, content, metadata, created_at, updated_at
+      SELECT memory_key, content, metadata, grants, created_at, updated_at
       FROM memories
       WHERE agent_id = ${scope.agentId}
         AND memory_key LIKE ${pattern}
@@ -182,6 +187,7 @@ export class DbMemoryProvider implements MemoryProvider {
       id: row.memory_key,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      grants: (Array.isArray(row.grants) ? row.grants : []) as unknown[],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -195,6 +201,7 @@ export class DbMemoryProvider implements MemoryProvider {
       id: row.memoryKey,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      grants: (Array.isArray(row.grants) ? row.grants : []) as unknown[],
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -206,15 +213,17 @@ export class DbMemoryProvider implements MemoryProvider {
 
     const content = input.content ?? existing.content;
     const metadata = input.metadata !== undefined ? { ...existing.metadata, ...input.metadata } : existing.metadata;
+    const grants = input.grants !== undefined ? input.grants : existing.grants;
     const now = new Date().toISOString();
 
     await this.db.update(memories).set({
       content,
       metadata: (metadata ?? {}) as Record<string, unknown>,
+      grants,
       updatedAt: now,
     }).where(and(eq(memories.agentId, scope.agentId), eq(memories.memoryKey, id)));
 
-    return { id, content, metadata, createdAt: existing.createdAt, updatedAt: now };
+    return { id, content, metadata, grants, createdAt: existing.createdAt, updatedAt: now };
   }
 
   async delete(scope: StoreScope, id: string): Promise<void> {

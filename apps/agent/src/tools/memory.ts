@@ -9,6 +9,20 @@ import {
   ensureAutonomyAllows,
   formatJson,
 } from './shared.js';
+import { type Grant, type Principal, buildPrincipal, canAccess } from '../core/policy.js';
+import type { MemoryEntry } from '@openhermit/store';
+
+const principalFrom = (ctx: ToolContext): Principal | undefined =>
+  ctx.agentId
+    ? buildPrincipal(ctx.agentId, ctx.currentUserId, ctx.currentUserRole)
+    : undefined;
+
+const memoryVisible = (entry: MemoryEntry, principal: Principal | undefined): boolean => {
+  const grants = entry.grants;
+  if (!Array.isArray(grants) || grants.length === 0) return true;
+  if (!principal) return false;
+  return canAccess(principal, grants as Grant[]);
+};
 
 const MemoryRecallParams = Type.Object({
   query: Type.String({
@@ -50,6 +64,11 @@ const MemoryUpdateParams = Type.Object({
 
 type MemoryUpdateArgs = Static<typeof MemoryUpdateParams>;
 
+const GrantSchema = Type.Object({
+  type: Type.String({ description: '"any", "role", or "user".' }),
+  value: Type.Optional(Type.String({ description: 'Role name or user ID.' })),
+});
+
 const MemoryAddParams = Type.Object({
   key: Type.Optional(
     Type.String({
@@ -65,6 +84,11 @@ const MemoryAddParams = Type.Object({
       description: 'Optional metadata (e.g. title, tags) to help future retrieval.',
     }),
   ),
+  grants: Type.Optional(
+    Type.Array(GrantSchema, {
+      description: 'Access grants. Empty array or omitted = open to everyone. Example: [{"type":"role","value":"owner"}] restricts to owner only.',
+    }),
+  ),
 });
 
 type MemoryAddArgs = Static<typeof MemoryAddParams>;
@@ -77,10 +101,7 @@ const MemoryDeleteParams = Type.Object({
 
 type MemoryDeleteArgs = Static<typeof MemoryDeleteParams>;
 
-export const createMemoryGetTool = ({
-  memoryProvider,
-  storeScope,
-}: ToolContext): PolicyAwareTool<typeof MemoryGetParams> => ({
+export const createMemoryGetTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryGetParams> => ({
   policy: { kind: 'fixed', grants: [{ type: 'any' }] },
   name: 'memory_get',
   label: 'Get Memory',
@@ -88,7 +109,7 @@ export const createMemoryGetTool = ({
     'Read one memory entry by exact key.',
   parameters: MemoryGetParams,
   execute: async (_toolCallId, args: MemoryGetArgs) => {
-    if (!memoryProvider || !storeScope) {
+    if (!ctx.memoryProvider || !ctx.storeScope) {
       throw new ValidationError('memory_get is unavailable: no memory provider is configured.');
     }
 
@@ -97,8 +118,12 @@ export const createMemoryGetTool = ({
       throw new ValidationError('memory_get requires a non-empty key.');
     }
 
-    const entry = await memoryProvider.get(storeScope, key);
+    const entry = await ctx.memoryProvider.get(ctx.storeScope, key);
     if (!entry) {
+      throw new ValidationError(`Memory not found: ${key}`);
+    }
+
+    if (!memoryVisible(entry, principalFrom(ctx))) {
       throw new ValidationError(`Memory not found: ${key}`);
     }
 
@@ -122,10 +147,7 @@ const MemoryListParams = Type.Object({
 
 type MemoryListArgs = Static<typeof MemoryListParams>;
 
-export const createMemoryListTool = ({
-  memoryProvider,
-  storeScope,
-}: ToolContext): PolicyAwareTool<typeof MemoryListParams> => ({
+export const createMemoryListTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryListParams> => ({
   policy: { kind: 'fixed', grants: [{ type: 'any' }] },
   name: 'memory_list',
   label: 'List Memory',
@@ -133,13 +155,15 @@ export const createMemoryListTool = ({
     'List memory entries by key prefix. Returns keys with a content preview for each entry. Use this to browse what memories exist under a namespace (e.g. "user/usr-owner/", "project/", "agent/") before using memory_get or memory_recall for details.',
   parameters: MemoryListParams,
   execute: async (_toolCallId, args: MemoryListArgs) => {
-    if (!memoryProvider || !storeScope) {
+    if (!ctx.memoryProvider || !ctx.storeScope) {
       throw new ValidationError('memory_list is unavailable: no memory provider is configured.');
     }
 
     const prefix = args.prefix.trim();
     const limit = Math.max(1, Math.min(50, Math.trunc(args.limit ?? 20)));
-    const entries = await memoryProvider.list(storeScope, prefix, { limit });
+    const principal = principalFrom(ctx);
+    const raw = await ctx.memoryProvider.list(ctx.storeScope, prefix, { limit: 50 });
+    const entries = raw.filter(e => memoryVisible(e, principal)).slice(0, limit);
 
     if (entries.length === 0) {
       return {
@@ -161,10 +185,7 @@ export const createMemoryListTool = ({
   },
 });
 
-export const createMemoryRecallTool = ({
-  memoryProvider,
-  storeScope,
-}: ToolContext): PolicyAwareTool<typeof MemoryRecallParams> => ({
+export const createMemoryRecallTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryRecallParams> => ({
   policy: { kind: 'fixed', grants: [{ type: 'any' }] },
   name: 'memory_recall',
   label: 'Recall Memory',
@@ -172,7 +193,7 @@ export const createMemoryRecallTool = ({
     'Search memory entries by keyword or phrase. Supports word-level matching with stemming — multi-word queries match individual tokens, not exact substrings. Use before adding new memories to avoid duplicates.',
   parameters: MemoryRecallParams,
   execute: async (_toolCallId, args: MemoryRecallArgs) => {
-    if (!memoryProvider || !storeScope) {
+    if (!ctx.memoryProvider || !ctx.storeScope) {
       throw new ValidationError('memory_recall is unavailable: no memory provider is configured.');
     }
 
@@ -182,7 +203,9 @@ export const createMemoryRecallTool = ({
     }
 
     const limit = Math.max(1, Math.min(10, Math.trunc(args.limit ?? 5)));
-    const matches = await memoryProvider.search(storeScope, query, { limit });
+    const principal = principalFrom(ctx);
+    const raw = await ctx.memoryProvider.search(ctx.storeScope, query, { limit: 20 });
+    const matches = raw.filter(e => memoryVisible(e, principal)).slice(0, limit);
 
     const text = matches.length > 0
       ? formatJson(matches)
@@ -229,6 +252,7 @@ export const createMemoryAddTool = ({
       ...(args.key?.trim() ? { id: args.key.trim() } : {}),
       content,
       ...(args.metadata ? { metadata: args.metadata as Record<string, unknown> } : {}),
+      ...(args.grants ? { grants: args.grants } : {}),
     });
 
     if (hookBus && agentId) {
@@ -325,6 +349,51 @@ export const createMemoryDeleteTool = ({
   },
 });
 
+const MemorySetGrantsParams = Type.Object({
+  key: Type.String({
+    description: 'Key of the memory entry to update grants for.',
+  }),
+  grants: Type.Array(GrantSchema, {
+    description: 'New grants array. Empty [] = open to everyone. Example: [{"type":"role","value":"owner"}].',
+  }),
+});
+
+type MemorySetGrantsArgs = Static<typeof MemorySetGrantsParams>;
+
+export const createMemorySetGrantsTool = ({
+  security,
+  memoryProvider,
+  storeScope,
+}: ToolContext): PolicyAwareTool<typeof MemorySetGrantsParams> => ({
+  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  name: 'memory_set_grants',
+  label: 'Set Memory Grants',
+  description:
+    'Set access grants on a memory entry. Only the owner can change who can read a memory. Empty grants = open to everyone.',
+  parameters: MemorySetGrantsParams,
+  execute: async (_toolCallId, args: MemorySetGrantsArgs) => {
+    ensureAutonomyAllows(security, 'memory_set_grants');
+
+    if (!memoryProvider || !storeScope) {
+      throw new ValidationError('memory_set_grants is unavailable: no memory provider is configured.');
+    }
+
+    const key = args.key.trim();
+    if (!key) {
+      throw new ValidationError('memory_set_grants requires a non-empty key.');
+    }
+
+    const entry = await memoryProvider.update(storeScope, key, {
+      grants: args.grants,
+    });
+
+    return {
+      content: asTextContent(formatJson(entry)),
+      details: entry,
+    };
+  },
+});
+
 // ── Toolset ────────────────────────────────────────────────────────
 
 const MEMORY_DESCRIPTION = `\
@@ -363,5 +432,6 @@ export const createMemoryToolset = (context: ToolContext): Toolset => ({
     createMemoryAddTool(context),
     createMemoryUpdateTool(context),
     createMemoryDeleteTool(context),
+    createMemorySetGrantsTool(context),
   ],
 });
