@@ -409,17 +409,153 @@ class HostFileBackend implements FileBackend {
   }
 }
 
-/** Stub backend for sandbox types where fs is not yet implemented. */
-class UnimplementedFileBackend implements FileBackend {
-  constructor(private readonly type: string) {}
-  private fail(): never {
-    throw new ValidationError(`File tools are not yet implemented for the "${this.type}" sandbox backend.`);
+/**
+ * E2B file backend. Delegates to the e2b SDK's `sandbox.files.*` methods.
+ * The sandbox handle is lazily provided after `ensure()`.
+ */
+class E2BFileBackend implements FileBackend {
+  sandbox: import('e2b').Sandbox | null = null;
+
+  private get sb(): import('e2b').Sandbox {
+    if (!this.sandbox) throw new ValidationError('E2B sandbox is not connected. Call ensure() first.');
+    return this.sandbox;
   }
-  async read(): Promise<FileReadResult> { this.fail(); }
-  async write(): Promise<void> { this.fail(); }
-  async list(): Promise<DirEntry[]> { this.fail(); }
-  async stat(): Promise<FileStat | null> { this.fail(); }
-  async delete(): Promise<void> { this.fail(); }
+
+  async read(filePath: string): Promise<FileReadResult> {
+    requireAbsolutePath(filePath);
+    const bytes = await this.sb.files.read(filePath, { format: 'bytes' });
+    return { data: Buffer.from(bytes) };
+  }
+
+  async write(filePath: string, data: Buffer, mode: FileWriteMode): Promise<void> {
+    requireAbsolutePath(filePath);
+    if (mode === 'create') {
+      const exists = await this.sb.files.exists(filePath);
+      if (exists) throw new ValidationError(`File already exists (mode=create): ${filePath}`);
+    }
+    if (mode === 'append') {
+      let existing = Buffer.alloc(0);
+      try {
+        const bytes = await this.sb.files.read(filePath, { format: 'bytes' });
+        existing = Buffer.from(bytes);
+      } catch {
+        // File doesn't exist — append acts like create.
+      }
+      const buf = Buffer.concat([existing, data]);
+      const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      await this.sb.files.write(filePath, ab);
+    } else {
+      const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      await this.sb.files.write(filePath, ab);
+    }
+  }
+
+  async list(dirPath: string): Promise<DirEntry[]> {
+    requireAbsolutePath(dirPath);
+    const entries = await this.sb.files.list(dirPath);
+    return entries.map((e) => ({
+      name: e.name,
+      type: e.type === 'dir' ? 'directory' as const : e.type === 'file' ? 'file' as const : 'other' as const,
+      ...(e.type === 'file' ? { size: e.size } : {}),
+    }));
+  }
+
+  async stat(filePath: string): Promise<FileStat | null> {
+    requireAbsolutePath(filePath);
+    try {
+      const info = await this.sb.files.getInfo(filePath);
+      return {
+        type: info.type === 'dir' ? 'directory' : info.type === 'file' ? 'file' : 'other',
+        size: info.size,
+        mtime: info.modifiedTime ? info.modifiedTime.toISOString() : new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async delete(filePath: string): Promise<void> {
+    requireAbsolutePath(filePath);
+    await this.sb.files.remove(filePath);
+  }
+}
+
+/**
+ * Daytona file backend. Delegates to `sandbox.fs.*` methods.
+ * The sandbox handle is lazily provided after `ensure()`.
+ */
+class DaytonaFileBackend implements FileBackend {
+  sandbox: import('@daytonaio/sdk').Sandbox | null = null;
+
+  private get sb(): import('@daytonaio/sdk').Sandbox {
+    if (!this.sandbox) throw new ValidationError('Daytona sandbox is not connected. Call ensure() first.');
+    return this.sandbox;
+  }
+
+  async read(filePath: string): Promise<FileReadResult> {
+    requireAbsolutePath(filePath);
+    const raw = await this.sb.fs.downloadFile(filePath);
+    return { data: Buffer.from(raw) };
+  }
+
+  async write(filePath: string, data: Buffer, mode: FileWriteMode): Promise<void> {
+    requireAbsolutePath(filePath);
+    // Ensure parent directory exists.
+    const dir = path.posix.dirname(filePath);
+    if (dir !== '/') {
+      try { await this.sb.fs.createFolder(dir, '755'); } catch { /* may exist */ }
+    }
+    if (mode === 'create') {
+      try {
+        await this.sb.fs.getFileDetails(filePath);
+        throw new ValidationError(`File already exists (mode=create): ${filePath}`);
+      } catch (err) {
+        if (err instanceof ValidationError) throw err;
+        // Not found — proceed.
+      }
+    }
+    if (mode === 'append') {
+      let existing = Buffer.alloc(0);
+      try {
+        const raw = await this.sb.fs.downloadFile(filePath);
+        existing = Buffer.from(raw);
+      } catch {
+        // File doesn't exist — append acts like create.
+      }
+      await this.sb.fs.uploadFile(Buffer.concat([existing, data]), filePath);
+    } else {
+      await this.sb.fs.uploadFile(data, filePath);
+    }
+  }
+
+  async list(dirPath: string): Promise<DirEntry[]> {
+    requireAbsolutePath(dirPath);
+    const entries = await this.sb.fs.listFiles(dirPath);
+    return entries.map((e) => ({
+      name: e.name,
+      type: e.isDir ? 'directory' as const : 'file' as const,
+      ...(!e.isDir ? { size: e.size } : {}),
+    }));
+  }
+
+  async stat(filePath: string): Promise<FileStat | null> {
+    requireAbsolutePath(filePath);
+    try {
+      const info = await this.sb.fs.getFileDetails(filePath);
+      return {
+        type: info.isDir ? 'directory' : 'file',
+        size: info.size,
+        mtime: info.modTime,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async delete(filePath: string): Promise<void> {
+    requireAbsolutePath(filePath);
+    await this.sb.fs.deleteFile(filePath);
+  }
 }
 
 // ── Docker backend ────────────────────────────────────────────────────────
@@ -642,7 +778,7 @@ class E2BExecBackend implements ExecBackend {
   readonly label: string;
   readonly username: string;
   readonly agentHome: string;
-  readonly files: FileBackend = new UnimplementedFileBackend('e2b');
+  readonly files: E2BFileBackend;
   private readonly template: string;
   private readonly timeoutMs: number;
   private readonly sandboxTimeoutMs: number;
@@ -660,6 +796,7 @@ class E2BExecBackend implements ExecBackend {
     this.sandboxTimeoutMs = config.sandbox_timeout_ms ?? E2B_DEFAULT_SANDBOX_TIMEOUT_MS;
     this.username = config.username ?? E2B_DEFAULT_USERNAME;
     this.agentHome = config.agent_home ?? E2B_DEFAULT_AGENT_HOME;
+    this.files = new E2BFileBackend();
   }
 
   async ensure(): Promise<void> {
@@ -681,6 +818,7 @@ class E2BExecBackend implements ExecBackend {
           apiKey,
           timeoutMs: this.sandboxTimeoutMs,
         });
+        this.files.sandbox = this.sandbox;
         await this.context.markActive?.({
           externalId: this.sandbox.sandboxId,
           lastSeenAt: new Date().toISOString(),
@@ -698,6 +836,7 @@ class E2BExecBackend implements ExecBackend {
       timeoutMs: this.sandboxTimeoutMs,
       metadata: { agentId: this.context.agentId },
     });
+    this.files.sandbox = this.sandbox;
 
     // Ensure workspace directory exists.
     await this.sandbox.commands.run(`mkdir -p ${this.agentHome}`);
@@ -815,6 +954,7 @@ class E2BExecBackend implements ExecBackend {
       // Already paused or gone — ignore.
     }
     this.sandbox = null;
+    this.files.sandbox = null;
   }
 
   private async loadState(): Promise<E2BBackendPersisted | null> {
@@ -891,7 +1031,7 @@ class DaytonaExecBackend implements ExecBackend {
   readonly label: string;
   readonly username: string;
   readonly agentHome: string;
-  readonly files: FileBackend = new UnimplementedFileBackend('daytona');
+  readonly files: DaytonaFileBackend;
   private readonly snapshot: string | undefined;
   private readonly image: string | undefined;
   private readonly timeoutMs: number;
@@ -919,6 +1059,7 @@ class DaytonaExecBackend implements ExecBackend {
     this.resources = config.resources;
     this.username = config.username ?? DAYTONA_DEFAULT_USERNAME;
     this.agentHome = config.agent_home ?? DAYTONA_DEFAULT_AGENT_HOME;
+    this.files = new DaytonaFileBackend();
   }
 
   async ensure(): Promise<void> {
@@ -943,6 +1084,7 @@ class DaytonaExecBackend implements ExecBackend {
           await existing.start();
         }
         this.sandbox = existing;
+        this.files.sandbox = existing;
         await this.context.markActive?.({
           externalId: existing.id,
           lastSeenAt: new Date().toISOString(),
@@ -966,6 +1108,7 @@ class DaytonaExecBackend implements ExecBackend {
     this.sandbox = await daytona.create(
       createParams as Parameters<typeof daytona.create>[0],
     );
+    this.files.sandbox = this.sandbox;
 
     // Ensure workspace directory exists.
     await this.sandbox.process.executeCommand(`mkdir -p ${this.agentHome}`);
@@ -1088,6 +1231,7 @@ class DaytonaExecBackend implements ExecBackend {
       // Already stopped or gone — ignore.
     }
     this.sandbox = null;
+    this.files.sandbox = null;
   }
 
   private async loadState(): Promise<DaytonaBackendPersisted | null> {
