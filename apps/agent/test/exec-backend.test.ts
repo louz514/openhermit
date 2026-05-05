@@ -11,7 +11,7 @@ import {
   createExecBackend,
   type ExecBackend,
   type BackendFactoryContext,
-} from '../src/core/exec-backend.js';
+} from '../src/core/index.js';
 import type { DockerRunner, DockerContainerManager } from '../src/core/container-manager.js';
 
 const fakeContext: BackendFactoryContext = {
