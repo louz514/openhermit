@@ -103,6 +103,7 @@ export interface MemoryEntry {
   id: string;
   content: string;
   metadata: Record<string, unknown>;
+  grants: unknown[];
   createdAt: string;
   updatedAt: string;
 }
@@ -111,11 +112,13 @@ export interface MemoryAddInput {
   content: string;
   id?: string;
   metadata?: Record<string, unknown>;
+  grants?: unknown[];
 }
 
 export interface MemoryUpdateInput {
   content?: string;
   metadata?: Record<string, unknown>;
+  grants?: unknown[];
 }
 
 export interface MemorySearchOptions {
