@@ -22,6 +22,12 @@ const PATH_ARG = Type.String({
 const FileReadParams = Type.Object({
   path: PATH_ARG,
   sandbox: SANDBOX_ARG,
+  offset: Type.Optional(
+    Type.Number({ description: 'Start reading from this line number (1-based). Omit to start from the beginning.' }),
+  ),
+  limit: Type.Optional(
+    Type.Number({ description: 'Maximum number of lines to return. Omit to read to the end (subject to 5 MiB cap).' }),
+  ),
   encoding: Type.Optional(
     Type.Union([Type.Literal('utf8'), Type.Literal('base64')], {
       description: "How to return file bytes. 'utf8' (default) for text; 'base64' for binary.",
@@ -56,6 +62,16 @@ const FileStatParams = Type.Object({
   sandbox: SANDBOX_ARG,
 });
 
+const FileEditParams = Type.Object({
+  path: PATH_ARG,
+  find_text: Type.String({ description: 'The exact text to search for in the file.' }),
+  replace_text: Type.String({ description: 'The text to replace it with.' }),
+  replace_all: Type.Optional(
+    Type.Boolean({ description: 'Replace all occurrences (default false — replace only the first match).' }),
+  ),
+  sandbox: SANDBOX_ARG,
+});
+
 const FileDeleteParams = Type.Object({
   path: PATH_ARG,
   sandbox: SANDBOX_ARG,
@@ -63,6 +79,7 @@ const FileDeleteParams = Type.Object({
 
 type FileReadArgs = Static<typeof FileReadParams>;
 type FileWriteArgs = Static<typeof FileWriteParams>;
+type FileEditArgs = Static<typeof FileEditParams>;
 type FileListArgs = Static<typeof FileListParams>;
 type FileStatArgs = Static<typeof FileStatParams>;
 type FileDeleteArgs = Static<typeof FileDeleteParams>;
@@ -81,25 +98,49 @@ export const createFileReadTool = (context: ToolContext): AgentTool<typeof FileR
   name: 'file_read',
   label: 'Read File',
   description:
-    'Read a file from a sandbox by absolute path. Returns text by default; use encoding=base64 for binary files. Hard cap of 5 MiB.',
+    'Read a file from a sandbox by absolute path. Use offset (1-based line number) and limit (line count) to read a range of lines from large files. Returns text by default; use encoding=base64 for binary files. Hard cap of 5 MiB.',
   parameters: FileReadParams,
   execute: async (_id, args: FileReadArgs) => {
     ensureAutonomyAllows(context.security, 'file_read');
     const backend = resolveBackend(context, args.sandbox);
     const { data } = await backend.files.read(args.path);
-    if (data.byteLength > MAX_READ_BYTES) {
+    if (data.byteLength > MAX_READ_BYTES && !args.offset && !args.limit) {
       throw new ValidationError(
-        `File is ${data.byteLength.toLocaleString()} bytes; exceeds the ${MAX_READ_BYTES.toLocaleString()} byte cap. Use exec for large files.`,
+        `File is ${data.byteLength.toLocaleString()} bytes; exceeds the ${MAX_READ_BYTES.toLocaleString()} byte cap. Use offset/limit to read a range, or exec for very large files.`,
       );
     }
     const encoding = args.encoding ?? 'utf8';
-    const content = encoding === 'base64' ? data.toString('base64') : data.toString('utf8');
+
+    if (encoding === 'base64') {
+      const content = data.toString('base64');
+      return {
+        content: asTextContent(content),
+        details: { path: args.path, sandbox: backend.id, size: data.byteLength, encoding },
+      };
+    }
+
+    const fullText = data.toString('utf8');
+    const allLines = fullText.split('\n');
+    const totalLines = allLines.length;
+
+    const offsetLine = Math.max(1, args.offset ?? 1);
+    const startIdx = offsetLine - 1;
+    const endIdx = args.limit != null ? Math.min(startIdx + args.limit, totalLines) : totalLines;
+    const selectedLines = allLines.slice(startIdx, endIdx);
+
+    // Number each line so the agent can reference positions.
+    const numbered = selectedLines
+      .map((line, i) => `${startIdx + i + 1}\t${line}`)
+      .join('\n');
+
     return {
-      content: asTextContent(content),
+      content: asTextContent(numbered),
       details: {
         path: args.path,
         sandbox: backend.id,
-        size: data.byteLength,
+        totalLines,
+        startLine: startIdx + 1,
+        endLine: endIdx,
         encoding,
       },
     };
@@ -159,6 +200,46 @@ export const createFileStatTool = (context: ToolContext): AgentTool<typeof FileS
   },
 });
 
+export const createFileEditTool = (context: ToolContext): AgentTool<typeof FileEditParams> => ({
+  name: 'file_edit',
+  label: 'Edit File',
+  description:
+    'Find and replace text in a file. By default replaces only the first occurrence; set replace_all=true to replace every match. The find_text must match exactly (not a regex). Fails if find_text is not found.',
+  parameters: FileEditParams,
+  execute: async (_id, args: FileEditArgs) => {
+    ensureAutonomyAllows(context.security, 'file_edit');
+    const backend = resolveBackend(context, args.sandbox);
+    const { data } = await backend.files.read(args.path);
+    const original = data.toString('utf8');
+
+    if (!original.includes(args.find_text)) {
+      throw new ValidationError(
+        `find_text not found in ${args.path}. Make sure the text matches exactly (including whitespace and newlines).`,
+      );
+    }
+
+    let updated: string;
+    let count: number;
+    if (args.replace_all) {
+      count = original.split(args.find_text).length - 1;
+      updated = original.split(args.find_text).join(args.replace_text);
+    } else {
+      count = 1;
+      const idx = original.indexOf(args.find_text);
+      updated = original.slice(0, idx) + args.replace_text + original.slice(idx + args.find_text.length);
+    }
+
+    await backend.files.write(args.path, Buffer.from(updated, 'utf8'), 'overwrite');
+
+    return {
+      content: asTextContent(
+        `Replaced ${count} occurrence${count > 1 ? 's' : ''} in ${args.path}.\n`,
+      ),
+      details: { path: args.path, sandbox: backend.id, replacements: count },
+    };
+  },
+});
+
 export const createFileDeleteTool = (context: ToolContext): AgentTool<typeof FileDeleteParams> => ({
   name: 'file_delete',
   label: 'Delete File',
@@ -179,12 +260,16 @@ const FILE_DESCRIPTION = `\
 ### File Tools
 
 First-class file operations on a sandbox: \`file_read\`, \`file_write\`,
-\`file_list\`, \`file_stat\`, \`file_delete\`. Paths are absolute, as the
-agent sees them inside the sandbox (under the agent's home directory).
+\`file_edit\`, \`file_list\`, \`file_stat\`, \`file_delete\`. Paths are
+absolute, as the agent sees them inside the sandbox.
 
-Prefer these over \`exec cat\` / \`exec tee\` for routine file work — they
-return structured results and stay within the file-policy gate. Use
-\`exec\` for shell-y things (search, build, scripts, processes).
+- \`file_read\`: read a file. Use \`offset\` (1-based line) and \`limit\` (line count) for large files.
+- \`file_write\`: create / overwrite / append a file.
+- \`file_edit\`: find-and-replace text in a file. Precise edits without rewriting the whole file.
+- \`file_list\`, \`file_stat\`, \`file_delete\`: directory listing, stat, single-file delete.
+
+Prefer these over \`exec cat\` / \`exec tee\` / \`exec sed\` for routine file work.
+Use \`exec\` for shell-y things (search, build, scripts, processes).
 
 For multi-sandbox agents, pass \`sandbox\` to choose; omit for the default.`;
 
@@ -194,6 +279,7 @@ export const createFileToolset = (context: ToolContext): Toolset => ({
   tools: [
     createFileReadTool(context),
     createFileWriteTool(context),
+    createFileEditTool(context),
     createFileListTool(context),
     createFileStatTool(context),
     createFileDeleteTool(context),
