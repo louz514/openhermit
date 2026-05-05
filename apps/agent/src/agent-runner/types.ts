@@ -27,6 +27,8 @@ export interface RunnerSession extends SessionDescriptor {
   resolvedUserId?: string;
   resolvedUserRole?: UserRole;
   resolvedUserName?: string;
+  resolvedChannel?: string;
+  resolvedChannelUserId?: string;
   langfuseTurnContext?: LangfuseTurnContext;
   turnStartMs?: number;
 }

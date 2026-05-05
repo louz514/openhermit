@@ -442,7 +442,7 @@ export class AgentRunner implements SessionRuntime {
       // Re-resolve user identity every time the session opens. This picks
       // up merges and explicit /api/users + /members registrations that
       // happened since the session was first created.
-      const { userId, role, userName } = await this.resolveSessionUser(existing.spec, now, caller);
+      const { userId, role, userName, channel: reChannel, channelUserId: reChannelUserId } = await this.resolveSessionUser(existing.spec, now, caller);
 
       // Access control: only allow reopen if the resolved user is already
       // a participant or is the owner.  Don't silently add strangers.
@@ -453,6 +453,8 @@ export class AgentRunner implements SessionRuntime {
       if (userId) existing.resolvedUserId = userId;
       if (role) existing.resolvedUserRole = role;
       if (userName) existing.resolvedUserName = userName;
+      if (reChannel) existing.resolvedChannel = reChannel;
+      if (reChannelUserId) existing.resolvedChannelUserId = reChannelUserId;
       // Don't add the reopener to user_ids. That list is the
       // canonical participant set (for direct: the original speaker;
       // for group: everyone who has sent a message). Reviewing a
@@ -572,6 +574,8 @@ export class AgentRunner implements SessionRuntime {
       ...(resolvedUserId ? { resolvedUserId } : {}),
       ...(resolvedUserRole ? { resolvedUserRole } : {}),
       ...(resolvedUserName ? { resolvedUserName } : {}),
+      ...(resolvedChannel ? { resolvedChannel } : {}),
+      ...(resolvedChannelUserId ? { resolvedChannelUserId } : {}),
       ...(langfuseTurnContext ? { langfuseTurnContext } : {}),
     };
 
@@ -1647,6 +1651,8 @@ export class AgentRunner implements SessionRuntime {
       ...(session.resolvedUserRole ? { userRole: session.resolvedUserRole } : {}),
       ...(session.resolvedUserId ? { userId: session.resolvedUserId } : {}),
       ...(session.resolvedUserName ? { userName: session.resolvedUserName } : {}),
+      ...(session.resolvedChannel ? { channel: session.resolvedChannel } : {}),
+      ...(session.resolvedChannelUserId ? { channelUserId: session.resolvedChannelUserId } : {}),
       ...(session.spec.source.type ? { sessionType: session.spec.source.type } : {}),
       sourceKind: session.spec.source.kind,
     });
