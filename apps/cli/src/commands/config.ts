@@ -134,7 +134,7 @@ export const registerConfigCommand = (program: Command): void => {
   // --- secrets ---
   const secrets = cfg
     .command('secrets')
-    .description('Manage agent secrets');
+    .description('Manage agent secrets (inherits --agent from `config`; defaults to $OPENHERMIT_AGENT_ID or "main")');
 
   secrets
     .command('list')
@@ -193,7 +193,7 @@ export const registerConfigCommand = (program: Command): void => {
 
   const security = cfg
     .command('security')
-    .description('View and modify agent security policy');
+    .description('View and modify agent security policy (inherits --agent from `config`)');
 
   security
     .command('show')
