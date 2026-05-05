@@ -65,17 +65,17 @@ export const createSandboxExecTool = (
 
 function buildExecDescription(context: ToolContext): string {
   if (!context.execBackendManager) {
-    return `Execute a shell command. Use this for all file operations (read, write, search, delete), build tools, language runtimes, tests, and any other shell task.`;
+    return `Execute a shell command. Use this for build tools, language runtimes, tests, search (grep/find), and any other shell task. For reading, writing, or editing files, use the file tools (file_read, file_write, file_edit) instead.`;
   }
   const backends = context.execBackendManager.list();
   if (backends.length === 1) {
     const b = backends[0]!;
-    return `Execute a shell command on ${b.label}. The workspace is at \`${b.agentHome}\`. Use this for all file operations, build tools, language runtimes, tests, and any other shell task.`;
+    return `Execute a shell command on ${b.label}. The workspace is at \`${b.agentHome}\`. Use this for build tools, language runtimes, tests, search (grep/find), and any other shell task. For reading, writing, or editing files, use the file tools (file_read, file_write, file_edit) instead.`;
   }
   const backendList = backends
     .map((b) => `- \`${b.id}\`: ${b.label} (workspace at \`${b.agentHome}\`)`)
     .join('\n');
-  return `Execute a shell command. Use the \`alias\` parameter to choose a sandbox.\n\nAvailable sandboxes:\n${backendList}\n\nUse this for all file operations, build tools, language runtimes, tests, and any other shell task.`;
+  return `Execute a shell command. Use the \`alias\` parameter to choose a sandbox.\n\nAvailable sandboxes:\n${backendList}\n\nUse this for build tools, language runtimes, tests, search (grep/find), and any other shell task. For reading, writing, or editing files, use the file tools (file_read, file_write, file_edit) instead.`;
 }
 
 // ── Toolset ────────────────────────────────────────────────────────
@@ -83,7 +83,15 @@ function buildExecDescription(context: ToolContext): string {
 const EXEC_DESCRIPTION = `\
 ### Execution
 
-Use \`exec\` to run any shell command. This is how you do everything: read files, write files, search, build, test, install packages, run scripts.
+Use \`exec\` to run shell commands: build, test, install packages, run scripts, search (grep/find), git, and any other shell task.
+
+**For file operations, use the file tools instead of exec:**
+- \`file_read\` instead of \`cat\` / \`head\` / \`tail\` (supports line ranges with offset/limit)
+- \`file_write\` instead of \`tee\` / \`echo >\` / redirection
+- \`file_edit\` instead of \`sed\` for find-and-replace
+- \`file_list\` instead of \`ls\`
+- \`file_stat\` instead of \`stat\`
+- \`file_delete\` instead of \`rm\`
 
 The execution environment is persistent. Installed packages and state survive between calls.
 
