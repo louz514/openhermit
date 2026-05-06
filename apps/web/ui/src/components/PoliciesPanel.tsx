@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPolicies, upsertPolicy, deletePolicy, type PolicyInfo } from '../api';
+import { useToast } from './Toast';
 
 const GRANT_PRESETS: { label: string; grants: Array<{ type: 'any' | 'role'; value?: string }> }[] = [
   { label: 'Everyone', grants: [{ type: 'any' }] },
@@ -19,10 +20,12 @@ function grantsLabel(grants: PolicyInfo['grants']): string {
 }
 
 export function PoliciesPanel() {
+  const { toast } = useToast();
   const [policies, setPolicies] = useState<PolicyInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<PolicyInfo | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,11 +42,16 @@ export function PoliciesPanel() {
 
   const handleDelete = async (p: PolicyInfo) => {
     if (!window.confirm(`Delete policy for ${p.resourceType}/${p.resourceKey} [${p.effect}]?`)) return;
+    const snapshot = policies;
+    setPolicies((arr) => arr.filter((x) => x.id !== p.id));
     try {
       await deletePolicy(p.resourceType, p.resourceKey, p.effect);
-      await load();
+      toast(`Deleted policy for ${p.resourceKey}`, 'success');
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to delete: ${msg}`, 'error');
+      setPolicies(snapshot);
     }
   };
 
@@ -84,6 +92,12 @@ export function PoliciesPanel() {
               <div className="policies-row__grants">{grantsLabel(p.grants)}</div>
               <div className="policies-row__actions">
                 <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => setEditing(p)}
+                >
+                  Edit
+                </button>
+                <button
                   className="btn btn--ghost btn--sm policies-row__delete"
                   onClick={() => void handleDelete(p)}
                 >
@@ -98,19 +112,52 @@ export function PoliciesPanel() {
       {error && <p className="basic-panel__error">{error}</p>}
 
       {showCreate && (
-        <CreatePolicyDialog onClose={() => setShowCreate(false)} onCreated={load} />
+        <CreatePolicyDialog
+          onClose={() => setShowCreate(false)}
+          onSaved={(msg) => { toast(msg, 'success'); void load(); }}
+        />
+      )}
+
+      {editing && (
+        <CreatePolicyDialog
+          existing={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(msg) => { toast(msg, 'success'); void load(); }}
+        />
       )}
     </div>
   );
 }
 
-function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreatePolicyDialog({
+  existing,
+  onClose,
+  onSaved,
+}: {
+  existing?: PolicyInfo;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [resourceKey, setResourceKey] = useState('');
-  const [effect, setEffect] = useState<'allow' | 'deny' | 'require_approval'>('allow');
-  const [preset, setPreset] = useState(2); // default: Owner + User
-  const [customGrants, setCustomGrants] = useState('');
-  const [useCustom, setUseCustom] = useState(false);
+  const [resourceKey, setResourceKey] = useState(existing?.resourceKey ?? '');
+  const [effect, setEffect] = useState<'allow' | 'deny' | 'require_approval'>(
+    (existing?.effect as 'allow' | 'deny' | 'require_approval') ?? 'allow',
+  );
+
+  // Try to map an existing policy's grants back onto a preset; fall back to
+  // custom JSON if the shape doesn't match any preset cleanly.
+  const matchedPreset = existing
+    ? GRANT_PRESETS.findIndex(
+        (p) => JSON.stringify(p.grants) === JSON.stringify(existing.grants),
+      )
+    : 2;
+  const initialUseCustom = existing != null && matchedPreset === -1;
+
+  const [preset, setPreset] = useState(matchedPreset === -1 ? 2 : matchedPreset);
+  const [customGrants, setCustomGrants] = useState(
+    initialUseCustom ? JSON.stringify(existing!.grants, null, 2) : '',
+  );
+  const [useCustom, setUseCustom] = useState(initialUseCustom);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -139,7 +186,7 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
     try {
       await upsertPolicy({ resourceType: 'tool', resourceKey: key, effect, grants });
       onClose();
-      onCreated();
+      onSaved(existing ? `Updated policy for ${key}` : `Added policy for ${key}`);
     } catch (error) {
       setErr((error as Error).message);
       setBusy(false);
@@ -149,7 +196,7 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
   return (
     <dialog ref={dialogRef} className="manage__dialog" onClose={onClose}>
       <form className="manage__dialog-form" onSubmit={handleSubmit}>
-        <h3>Add Tool Policy</h3>
+        <h3>{existing ? 'Edit Tool Policy' : 'Add Tool Policy'}</h3>
         <label className="manage__field">
           <span className="manage__field-label">Tool name</span>
           <input
@@ -158,8 +205,11 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
             value={resourceKey}
             onChange={(e) => setResourceKey(e.target.value)}
             placeholder="e.g. exec, file_write, mcp__server__*"
-            disabled={busy}
+            disabled={busy || existing != null}
           />
+          {existing && (
+            <span className="field__help">Resource key cannot be changed; delete and re-create to rename.</span>
+          )}
         </label>
 
         <label className="manage__field">
