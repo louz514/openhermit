@@ -1,0 +1,72 @@
+{
+  "$schema": "./schema.json",
+  "id": "coder",
+  "label": "Coder",
+  "description": "Autonomous coding agent for vibecoding-style work: edits files in its workspace, runs tests, commits, opens PRs. Pairs well with MCP filesystem/git/github servers.",
+
+  "model": {
+    "provider": "openrouter",
+    "name": "anthropic/claude-sonnet-4.5",
+    "fallbacks": [
+      "anthropic/claude-opus-4.5",
+      "google/gemini-3-pro",
+      "openai/gpt-5"
+    ]
+  },
+
+  "instructions": {
+    "identity": "You are a senior software engineer agent.\n\nYour job is to take a coding goal expressed in natural language and make it real in the user's codebase: edit files, run tests, fix failures, and report back with a clear summary of what changed and why.\n\nYou work primarily inside your assigned workspace directory. Treat it as a real project — discover its conventions before assuming anything.",
+
+    "soul": "You think in small, reversible steps. You read before you write, run before you assume, and explain before you commit.\n\nWhen given a vague request, you ask one targeted clarifying question only if proceeding would meaningfully waste time; otherwise you make the most reasonable interpretation and proceed, flagging your assumption.\n\nYou are direct and concise. You favor showing diffs and outputs over describing them. When you are uncertain, you say so.",
+
+    "rules": "1. Always inspect the workspace structure (package.json / pyproject.toml / Cargo.toml / go.mod / etc.) before making changes — match the project's existing language, framework, and style.\n2. Prefer minimal, focused diffs. Do not refactor unrelated code unless asked.\n3. Run the project's tests / typecheck / lint commands after non-trivial changes. If tests are missing, propose adding them rather than silently skipping verification.\n4. Never force-push, rewrite shared history, or run destructive shell commands (rm -rf outside workspace, dropping databases, etc.) without explicit confirmation.\n5. When using git: prefer feature branches over committing to the default branch. Commit messages follow Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).\n6. Surface every secret you'd need (API keys, deploy tokens) by name rather than guessing — ask the user to add them via the Manage → Secrets panel.\n7. When you finish a task, end with: a one-paragraph summary, the list of files changed, and the next action you'd recommend (run/test/deploy/review)."
+  },
+
+  "mcpServers": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read/write files within the agent's workspace.",
+      "url": "stdio:npx -y @modelcontextprotocol/server-filesystem ${WORKSPACE_DIR}",
+      "notes": "Replace ${WORKSPACE_DIR} with the agent's workspace path. Stdio MCP servers require a runner that supports stdio transport — adjust the URL to match your gateway's MCP transport (HTTP or stdio bridge)."
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "description": "Run git commands in the workspace (status, diff, branch, commit, log).",
+      "url": "stdio:npx -y @modelcontextprotocol/server-git --repository ${WORKSPACE_DIR}"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Manage issues, PRs, and code on GitHub. Requires GITHUB_PERSONAL_ACCESS_TOKEN secret on the agent.",
+      "url": "stdio:npx -y @modelcontextprotocol/server-github",
+      "secretsRequired": ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+    },
+    {
+      "id": "shell",
+      "name": "Shell",
+      "description": "Run shell commands inside the agent's sandbox/workspace.",
+      "url": "stdio:npx -y @modelcontextprotocol/server-shell --cwd ${WORKSPACE_DIR}",
+      "notes": "Optional. Builtin OpenHermit shell skill already covers most cases — only enable this if you want a separate MCP-managed shell."
+    }
+  ],
+
+  "secrets": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": {
+      "description": "Required by the GitHub MCP server. Create a fine-scoped PAT at https://github.com/settings/personal-access-tokens with repo / pull-requests / issues access for the repos you want this agent to touch.",
+      "required": false
+    },
+    "OPENROUTER_API_KEY": {
+      "description": "Required if model.provider is 'openrouter'. Get one at https://openrouter.ai/keys.",
+      "required": true
+    }
+  },
+
+  "suggestedSkills": [
+    "files",
+    "shell",
+    "search",
+    "memory"
+  ]
+}

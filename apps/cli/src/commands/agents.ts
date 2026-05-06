@@ -1,6 +1,84 @@
 import type { Command } from 'commander';
+import { readFile } from 'node:fs/promises';
+import { dirname, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createGateway, handleError, printTable } from './shared.js';
+
+interface AgentTemplate {
+  id: string;
+  label?: string;
+  description?: string;
+  model?: { provider?: string; name?: string; fallbacks?: string[] };
+  instructions?: Record<string, string>;
+  mcpServers?: Array<{ id: string; name: string; description: string; url: string }>;
+}
+
+const TEMPLATES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../templates');
+
+async function loadTemplate(nameOrPath: string): Promise<AgentTemplate> {
+  const path = isAbsolute(nameOrPath) || nameOrPath.includes('/')
+    ? nameOrPath
+    : resolve(TEMPLATES_DIR, `${nameOrPath}.json`);
+  const raw = await readFile(path, 'utf8');
+  return JSON.parse(raw) as AgentTemplate;
+}
+
+type GatewayClient = ReturnType<typeof createGateway>;
+
+async function applyTemplateToAgent(
+  gateway: GatewayClient,
+  agentId: string,
+  tmpl: AgentTemplate,
+): Promise<void> {
+  // 1. Instructions
+  if (tmpl.instructions) {
+    for (const [key, content] of Object.entries(tmpl.instructions)) {
+      await gateway.setInstruction(agentId, key, content);
+      console.log(`  · instructions/${key} set`);
+    }
+  }
+
+  // 2. Model — merge into existing config so we don't clobber other fields.
+  if (tmpl.model) {
+    try {
+      const cfg = await gateway.getAgentConfig(agentId);
+      const next = { ...cfg, model: { ...(cfg.model as object | undefined ?? {}), ...tmpl.model } };
+      await gateway.putAgentConfig(agentId, next);
+      console.log(`  · model set to ${tmpl.model.name ?? '(unspecified)'}`);
+    } catch (err) {
+      console.warn(`  · could not update model config: ${(err as Error).message}`);
+    }
+  }
+
+  // 3. MCP servers — register each (idempotent upsert) and enable for this agent.
+  if (tmpl.mcpServers && tmpl.mcpServers.length > 0) {
+    for (const server of tmpl.mcpServers) {
+      try {
+        await gateway.registerMcpServer({
+          id: server.id,
+          name: server.name,
+          description: server.description,
+          url: server.url,
+        });
+      } catch (err) {
+        // Ignore conflict (already registered); surface other errors.
+        const msg = (err as Error).message ?? '';
+        if (!/conflict|exists|409/i.test(msg)) {
+          console.warn(`  · could not register MCP "${server.id}": ${msg}`);
+          continue;
+        }
+      }
+      try {
+        await gateway.enableMcpServer(server.id, agentId);
+        console.log(`  · mcp/${server.id} enabled`);
+      } catch (err) {
+        console.warn(`  · could not enable MCP "${server.id}": ${(err as Error).message}`);
+      }
+    }
+    console.log('  · note: MCP servers using stdio:// URLs require a stdio-capable transport in your gateway. Edit URLs as needed.');
+  }
+}
 
 export const registerAgentsCommand = (program: Command): void => {
   const agents = program
@@ -49,16 +127,16 @@ export const registerAgentsCommand = (program: Command): void => {
     .option('--owner <userId>', 'Owner user ID')
     .option('--sandbox <preset>', 'Sandbox preset to provision (defaults to gateway autoProvisionSandbox)')
     .option('--no-sandbox', 'Skip sandbox provisioning entirely')
+    .option('--template <nameOrPath>', 'Apply a built-in template (e.g. "coder") or a path to a template JSON file after creation')
     .action(async (agentId: string, opts: {
       name?: string;
       workspaceDir?: string;
       owner?: string;
       sandbox?: string | false;
+      template?: string;
     }) => {
       try {
         const gateway = createGateway();
-        // Commander turns `--no-sandbox` into `sandbox: false`; map both
-        // forms onto the API's `sandbox: string | null` field.
         const sandboxField: { sandbox: string | null } | object =
           opts.sandbox === false
             ? { sandbox: null }
@@ -73,6 +151,27 @@ export const registerAgentsCommand = (program: Command): void => {
           ...sandboxField,
         });
         console.log(`Agent created: ${result.agentId} (${result.status})`);
+
+        if (opts.template) {
+          const tmpl = await loadTemplate(opts.template);
+          await applyTemplateToAgent(gateway, agentId, tmpl);
+          console.log(`Template applied: ${tmpl.label ?? tmpl.id}`);
+        }
+      } catch (error) {
+        handleError(error);
+      }
+    });
+
+  // --- apply-template ---
+  agents
+    .command('apply-template <agentId> <nameOrPath>')
+    .description('Apply a template to an existing agent (sets instructions, model, registers MCP servers)')
+    .action(async (agentId: string, nameOrPath: string) => {
+      try {
+        const gateway = createGateway();
+        const tmpl = await loadTemplate(nameOrPath);
+        await applyTemplateToAgent(gateway, agentId, tmpl);
+        console.log(`Template "${tmpl.label ?? tmpl.id}" applied to ${agentId}.`);
       } catch (error) {
         handleError(error);
       }
