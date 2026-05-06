@@ -76,6 +76,58 @@ interface Props {
 
 // ─── Components ────────────────────────────────────────────────────────────
 
+function formatValue(value: unknown, indent = 0): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'object' && parsed !== null) return formatValue(parsed, indent);
+    } catch { /* not JSON, return as-is */ }
+    return value;
+  }
+  if (typeof value !== 'object') return String(value);
+  return JSON.stringify(value, null, 2);
+}
+
+function FormatJson({ value, maxLen = 1200 }: { value: unknown; maxLen?: number }) {
+  if (value === undefined || value === null) return null;
+
+  let obj = value;
+  if (typeof obj === 'string') {
+    try { obj = JSON.parse(obj); } catch { /* not JSON */ }
+  }
+
+  if (typeof obj === 'string') {
+    const display = obj.length > maxLen ? obj.slice(0, maxLen) + '…' : obj;
+    return <pre className="tool-card__pre">{display}</pre>;
+  }
+
+  if (typeof obj !== 'object' || obj === null) {
+    return <pre className="tool-card__pre">{String(obj)}</pre>;
+  }
+
+  const entries = Array.isArray(obj)
+    ? obj.map((v, i) => [String(i), v] as const)
+    : Object.entries(obj as Record<string, unknown>);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="tool-card__kv">
+      {entries.map(([key, val]) => {
+        const display = formatValue(val);
+        const truncated = display.length > maxLen ? display.slice(0, maxLen) + '…' : display;
+        return (
+          <div key={key} className="tool-card__kv-row">
+            <span className="tool-card__kv-key">{key}</span>
+            <pre className="tool-card__kv-val">{truncated}</pre>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ToolCard({ item }: { item: Extract<ChatItem, { type: 'tool' }> }) {
   const icon = item.phase === 'done'
     ? (item.isError ? '✗' : '✓')
@@ -85,14 +137,6 @@ function ToolCard({ item }: { item: Extract<ChatItem, { type: 'tool' }> }) {
     : item.phase;
 
   const doneClass = item.phase === 'done' ? (item.isError ? 'tool-card--error' : 'tool-card--done') : '';
-
-  const formatArgs = (value: unknown): string => {
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'string') return value;
-    const compact = JSON.stringify(value);
-    return compact.length <= 120 ? compact : JSON.stringify(value, null, 2);
-  };
-
   const hasBody = item.args != null || item.result;
 
   return (
@@ -111,12 +155,14 @@ function ToolCard({ item }: { item: Extract<ChatItem, { type: 'tool' }> }) {
       {hasBody && (
         <div className="tool-card__body">
           {item.args != null && (
-            <pre className="tool-card__args">{formatArgs(item.args)}</pre>
+            <div className="tool-card__section">
+              <FormatJson value={item.args} />
+            </div>
           )}
           {item.result && (
-            <pre className="tool-card__result">
-              {item.result.length > 800 ? item.result.slice(0, 800) + '...' : item.result}
-            </pre>
+            <div className="tool-card__section tool-card__section--result">
+              <FormatJson value={item.result} />
+            </div>
           )}
         </div>
       )}
@@ -133,16 +179,12 @@ function ApprovalCard({ item, onApproval }: { item: Extract<ChatItem, { type: 'a
     );
   }
 
-  const formatArgs = (value: unknown): string => {
-    if (value === undefined || value === null) return 'No arguments';
-    if (typeof value === 'string') return value;
-    return JSON.stringify(value, null, 2);
-  };
-
   return (
     <div className="approval-card">
       <div className="approval-card__title">Approval required · {item.toolName}</div>
-      <div className="approval-card__body">{formatArgs(item.args)}</div>
+      <div className="approval-card__body">
+        {item.args != null ? <FormatJson value={item.args} /> : 'No arguments'}
+      </div>
       <div className="approval-card__actions">
         <button className="btn btn--primary" onClick={() => void onApproval(item.toolCallId, true)}>Approve</button>
         <button className="btn btn--ghost" onClick={() => void onApproval(item.toolCallId, false)}>Deny</button>

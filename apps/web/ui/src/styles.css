@@ -652,22 +652,45 @@ h2 { font-size: 14px; font-weight: 600; }
 .tool-card__label { font-size: 11px; font-weight: 400; color: var(--muted); }
 .tool-card__name { font-weight: 500; color: var(--text); font-family: var(--mono, monospace); }
 
-.tool-card__args, .tool-card__result {
-  margin: 0;
-  padding: 6px 10px;
+.tool-card__section {
   border-top: 1px solid var(--line);
+  padding: 6px 10px;
+  max-height: 200px;
+  overflow: auto;
+}
+.tool-card__section--result { background: rgba(0, 0, 0, 0.02); }
+.tool-card--error .tool-card__section--result { color: var(--danger); }
+
+.tool-card__pre {
+  margin: 0;
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-secondary);
-  max-height: 160px;
-  overflow: auto;
 }
 
-.tool-card__result { background: rgba(0, 0, 0, 0.02); }
-.tool-card--error .tool-card__result { color: var(--danger); }
+.tool-card__kv { display: flex; flex-direction: column; gap: 3px; }
+.tool-card__kv-row { display: flex; gap: 8px; align-items: baseline; font-size: 11px; line-height: 1.45; }
+.tool-card__kv-key {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--accent, #6366f1);
+  min-width: 0;
+}
+.tool-card__kv-key::after { content: ':'; }
+.tool-card__kv-val {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+  min-width: 0;
+}
 
 /* ─── Composer ──────────────────────────────────────────────────── */
 
