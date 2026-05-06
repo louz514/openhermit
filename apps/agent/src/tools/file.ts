@@ -6,6 +6,7 @@ import {
   type Toolset,
   type ToolContext,
   asTextContent,
+  checkApprovalOrRequest,
   ensureAutonomyAllows,
   formatJson,
 } from './shared.js';
@@ -126,8 +127,15 @@ const checkFilePath = async (
     throw new ValidationError(`Access denied: ${mode} ${path} (sandbox: ${sandboxAlias})`);
   }
   const decision = evaluateAccess(principal, matches, 'deny');
-  if (decision !== 'allow') {
+  if (decision === 'deny') {
     throw new ValidationError(`Access denied: ${mode} ${path} (sandbox: ${sandboxAlias})`);
+  }
+  if (decision === 'require_approval') {
+    await checkApprovalOrRequest(context, 'file', `${sandboxAlias}:${mode}:${path}`, {
+      sandbox: sandboxAlias,
+      mode,
+      path,
+    });
   }
 };
 

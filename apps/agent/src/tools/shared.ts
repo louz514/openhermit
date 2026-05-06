@@ -125,3 +125,54 @@ export const ensureAutonomyAllows = (
     throw new ValidationError(`${toolName} is not allowed in readonly mode.`);
   }
 };
+
+export class ApprovalRequiredError extends Error {
+  constructor(
+    public readonly requestId: string,
+    public readonly resourceType: string,
+    public readonly resourceKey: string,
+  ) {
+    super(
+      `Access requires approval. An approval request has been created (id: ${requestId}). `
+      + `Ask the agent owner to run approval_review to approve or reject it.`,
+    );
+    this.name = 'ApprovalRequiredError';
+  }
+}
+
+/**
+ * When evaluateAccess returns 'require_approval', check for an existing
+ * approved request. If found, allow. Otherwise create a new request and
+ * throw ApprovalRequiredError.
+ */
+export const checkApprovalOrRequest = async (
+  context: ToolContext,
+  resourceType: string,
+  resourceKey: string,
+  scope?: Record<string, unknown>,
+): Promise<void> => {
+  if (!context.approvalRequestStore || !context.storeScope || !context.currentUserId) {
+    throw new ValidationError(
+      `Access to ${resourceType}/${resourceKey} requires approval, but no approval store is configured.`,
+    );
+  }
+
+  const approved = await context.approvalRequestStore.findApproved(
+    context.storeScope.agentId,
+    context.currentUserId,
+    resourceType,
+    resourceKey,
+  );
+  if (approved) return;
+
+  const request = await context.approvalRequestStore.create({
+    agentId: context.storeScope.agentId,
+    sessionId: context.sessionId ?? 'unknown',
+    requesterId: context.currentUserId,
+    resourceType,
+    resourceKey,
+    ...(scope ? { scope } : {}),
+  });
+
+  throw new ApprovalRequiredError(request.id, resourceType, resourceKey);
+};
