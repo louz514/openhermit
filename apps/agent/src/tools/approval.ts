@@ -3,6 +3,7 @@ import type { AgentTool } from '@mariozechner/pi-agent-core';
 import { AgentSecurity } from '../core/index.js';
 import type { AgentEventBus } from '../events.js';
 import {
+  ApprovalRequiredError,
   type ApprovalCallback,
   asTextContent,
   type ToolCallCallback,
@@ -130,14 +131,37 @@ export const withApproval = (
   approvedCache?: Set<string>,
   hookCtx?: ToolHookContext,
 ): AgentTool<any> => {
+  const wrapApprovalRequired = (fn: AgentTool<any>['execute']): AgentTool<any>['execute'] =>
+    async (toolCallId, args, signal, onUpdate) => {
+      try {
+        return await fn(toolCallId, args, signal, onUpdate);
+      } catch (err) {
+        if (err instanceof ApprovalRequiredError) {
+          return {
+            content: asTextContent(err.message),
+            details: {
+              requiresApproval: true,
+              requestId: err.requestId,
+              resourceType: err.resourceType,
+              resourceKey: err.resourceKey,
+            },
+          };
+        }
+        throw err;
+      }
+    };
+
   if (!approvalCallback) {
     if (!onToolCall && !hookCtx) {
-      return tool;
+      return {
+        ...tool,
+        execute: wrapApprovalRequired(tool.execute.bind(tool)),
+      };
     }
 
     return {
       ...tool,
-      execute: async (
+      execute: wrapApprovalRequired(async (
         toolCallId: string,
         args: unknown,
         signal?: AbortSignal,
@@ -145,13 +169,13 @@ export const withApproval = (
       ) => {
         if (onToolCall) await onToolCall(tool.name, toolCallId, args);
         return callWithHooks(tool, toolCallId, args, signal, onUpdate, hookCtx);
-      },
+      }),
     };
   }
 
   return {
     ...tool,
-    execute: async (
+    execute: wrapApprovalRequired(async (
       toolCallId: string,
       args: unknown,
       signal?: AbortSignal,
@@ -195,6 +219,6 @@ export const withApproval = (
 
       await onToolCall?.(tool.name, toolCallId, args);
       return callWithHooks(tool, toolCallId, args, signal, onUpdate, hookCtx);
-    },
+    }),
   };
 };

@@ -1573,16 +1573,68 @@ export class AgentRunner implements SessionRuntime {
     const mcpRows: PolicyRow[] | undefined = this.options.policyStore
       ? await this.options.policyStore.list(this.scope.agentId, 'mcp')
       : undefined;
-    const filteredTools = tools.filter((t: any) => {
-      const toolMatches = resolveToolMatches(policyRows, t.name, t.policy);
-      if (evaluateAccess(principal, toolMatches) !== 'allow') return false;
-      const serverId = parseMcpServerId(t.name);
-      if (serverId && mcpRows) {
-        const mcpMatches = resolveMcpMatches(mcpRows, serverId);
-        if (mcpMatches !== undefined && evaluateAccess(principal, mcpMatches) !== 'allow') return false;
-      }
-      return true;
-    });
+    const approvalStore = this.options.approvalRequestStore;
+    const agentId = this.scope.agentId;
+    const userId = input.userId;
+    const sessionId = input.contextSessionId;
+
+    const filteredTools = tools
+      .filter((t: any) => {
+        const toolMatches = resolveToolMatches(policyRows, t.name, t.policy);
+        const toolDecision = evaluateAccess(principal, toolMatches);
+        if (toolDecision === 'deny') return false;
+        const serverId = parseMcpServerId(t.name);
+        if (serverId && mcpRows) {
+          const mcpMatches = resolveMcpMatches(mcpRows, serverId);
+          if (mcpMatches !== undefined && evaluateAccess(principal, mcpMatches) === 'deny') return false;
+        }
+        return true;
+      })
+      .map((t: any) => {
+        const toolMatches = resolveToolMatches(policyRows, t.name, t.policy);
+        const toolDecision = evaluateAccess(principal, toolMatches);
+        if (toolDecision !== 'require_approval') return t;
+
+        let mcpNeedsApproval = false;
+        const serverId = parseMcpServerId(t.name);
+        if (serverId && mcpRows) {
+          const mcpMatches = resolveMcpMatches(mcpRows, serverId);
+          if (mcpMatches !== undefined && evaluateAccess(principal, mcpMatches) === 'require_approval') {
+            mcpNeedsApproval = true;
+          }
+        }
+
+        if (!mcpNeedsApproval && toolDecision !== 'require_approval') return t;
+
+        return {
+          ...t,
+          execute: async (toolCallId: string, args: unknown, signal?: AbortSignal, onUpdate?: any) => {
+            if (approvalStore && userId) {
+              const resourceKey = t.name;
+              const approved = await approvalStore.findApproved(agentId, userId, 'tool', resourceKey);
+              if (!approved) {
+                const request = await approvalStore.create({
+                  agentId,
+                  sessionId: sessionId ?? 'unknown',
+                  requesterId: userId,
+                  resourceType: 'tool',
+                  resourceKey,
+                });
+                return {
+                  content: [{
+                    type: 'text' as const,
+                    text: `Access to tool "${t.name}" requires approval. `
+                      + `An approval request has been created (id: ${request.id}). `
+                      + `Ask the agent owner to run approval_review to approve or reject it.`,
+                  }],
+                  details: { requiresApproval: true, requestId: request.id },
+                };
+              }
+            }
+            return t.execute(toolCallId, args, signal, onUpdate);
+          },
+        };
+      });
 
     const currentUser = input.userId && input.userRole
       ? {

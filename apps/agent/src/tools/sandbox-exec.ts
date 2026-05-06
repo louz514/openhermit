@@ -5,6 +5,7 @@ import {
   type Toolset,
   type ToolContext,
   asTextContent,
+  checkApprovalOrRequest,
   ensureAutonomyAllows,
   formatJson,
 } from './shared.js';
@@ -63,8 +64,15 @@ export const createSandboxExecTool = (
       if (matches !== undefined) {
         const principal = buildPrincipal(context.agentId, context.currentUserId, context.currentUserRole);
         const decision = evaluateAccess(principal, matches, 'deny');
-        if (decision !== 'allow') {
+        if (decision === 'deny') {
           throw new ValidationError(`Access denied: exec command not allowed (sandbox: ${backend.id})`);
+        }
+        if (decision === 'require_approval') {
+          await checkApprovalOrRequest(context, 'exec', `${backend.id}:${args.command}`, {
+            sandbox: backend.id,
+            command: args.command,
+            ...(args.cwd ? { cwd: args.cwd } : {}),
+          });
         }
       }
     }
