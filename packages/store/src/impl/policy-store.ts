@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import pg from 'pg';
 
 import type { PolicyStore } from '../interfaces.js';
-import type { PolicyRecord } from '../types.js';
+import type { PolicyEffect, PolicyRecord } from '../types.js';
 import * as schema from '../schema.js';
 import { agentPolicies } from '../schema.js';
 import type { DrizzleDb } from './index.js';
@@ -43,17 +43,25 @@ export class DbPolicyStore implements PolicyStore {
     agentId: string,
     resourceType: string,
     resourceKey: string,
+    effect?: string,
   ): Promise<PolicyRecord | undefined> {
-    const rows = await this.db
-      .select()
-      .from(agentPolicies)
-      .where(
-        and(
+    const conditions = effect
+      ? and(
           eq(agentPolicies.agentId, agentId),
           eq(agentPolicies.resourceType, resourceType),
           eq(agentPolicies.resourceKey, resourceKey),
-        ),
-      )
+          eq(agentPolicies.effect, effect),
+        )
+      : and(
+          eq(agentPolicies.agentId, agentId),
+          eq(agentPolicies.resourceType, resourceType),
+          eq(agentPolicies.resourceKey, resourceKey),
+        );
+
+    const rows = await this.db
+      .select()
+      .from(agentPolicies)
+      .where(conditions)
       .limit(1);
 
     return rows[0] ? toRecord(rows[0]) : undefined;
@@ -63,7 +71,7 @@ export class DbPolicyStore implements PolicyStore {
     input: Omit<PolicyRecord, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<PolicyRecord> {
     const now = new Date().toISOString();
-    const existing = await this.get(input.agentId, input.resourceType, input.resourceKey);
+    const existing = await this.get(input.agentId, input.resourceType, input.resourceKey, input.effect);
 
     if (existing) {
       await this.db
@@ -78,6 +86,7 @@ export class DbPolicyStore implements PolicyStore {
       agentId: input.agentId,
       resourceType: input.resourceType,
       resourceKey: input.resourceKey,
+      effect: input.effect,
       grants: input.grants,
       scope: input.scope,
       createdAt: now,
@@ -91,16 +100,22 @@ export class DbPolicyStore implements PolicyStore {
     agentId: string,
     resourceType: string,
     resourceKey: string,
+    effect?: string,
   ): Promise<void> {
-    await this.db
-      .delete(agentPolicies)
-      .where(
-        and(
+    const conditions = effect
+      ? and(
           eq(agentPolicies.agentId, agentId),
           eq(agentPolicies.resourceType, resourceType),
           eq(agentPolicies.resourceKey, resourceKey),
-        ),
-      );
+          eq(agentPolicies.effect, effect),
+        )
+      : and(
+          eq(agentPolicies.agentId, agentId),
+          eq(agentPolicies.resourceType, resourceType),
+          eq(agentPolicies.resourceKey, resourceKey),
+        );
+
+    await this.db.delete(agentPolicies).where(conditions);
   }
 }
 
@@ -110,6 +125,7 @@ function toRecord(row: typeof agentPolicies.$inferSelect): PolicyRecord {
     agentId: row.agentId,
     resourceType: row.resourceType,
     resourceKey: row.resourceKey,
+    effect: (row.effect ?? 'allow') as PolicyEffect,
     grants: row.grants ?? [],
     scope: (row.scope ?? {}) as Record<string, unknown>,
     createdAt: row.createdAt,

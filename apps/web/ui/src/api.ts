@@ -619,6 +619,7 @@ export interface PolicyInfo {
   agentId: string;
   resourceType: string;
   resourceKey: string;
+  effect: 'allow' | 'deny' | 'require_approval';
   grants: Array<{ type: 'any' | 'role' | 'user'; value?: string }>;
   scope: Record<string, unknown>;
   createdAt: string;
@@ -631,11 +632,14 @@ export const fetchPolicies = (resourceType?: string) => {
 export const upsertPolicy = (data: {
   resourceType: string;
   resourceKey: string;
+  effect?: string;
   grants: Array<{ type: string; value?: string }>;
   scope?: Record<string, unknown>;
 }) => apiFetch<PolicyInfo>('/policies', { method: 'POST', body: data });
-export const deletePolicy = (resourceType: string, resourceKey: string) =>
-  apiFetch<{ ok: boolean }>(`/policies/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceKey)}`, { method: 'DELETE' });
+export const deletePolicy = (resourceType: string, resourceKey: string, effect?: string) => {
+  const qs = effect ? `?effect=${encodeURIComponent(effect)}` : '';
+  return apiFetch<{ ok: boolean }>(`/policies/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceKey)}${qs}`, { method: 'DELETE' });
+};
 
 // Secrets — server returns values masked (e.g. "abcd********wxyz").
 // Use setAgentSecret / deleteAgentSecret for per-key edits.

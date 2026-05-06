@@ -525,6 +525,7 @@ export class GatewayClient {
   async upsertPolicy(agentId: string, input: {
     resourceType: string;
     resourceKey: string;
+    effect?: string;
     grants: unknown[];
     scope?: Record<string, unknown>;
   }): Promise<unknown> {
@@ -535,9 +536,11 @@ export class GatewayClient {
     agentId: string,
     resourceType: string,
     resourceKey: string,
+    effect?: string,
   ): Promise<void> {
+    const qs = effect ? `?effect=${encodeURIComponent(effect)}` : '';
     await this.deleteJson(
-      `/api/agents/${encodeURIComponent(agentId)}/policies/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceKey)}`,
+      `/api/agents/${encodeURIComponent(agentId)}/policies/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceKey)}${qs}`,
     );
   }
 

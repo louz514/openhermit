@@ -21,12 +21,17 @@ const PolicyListParams = Type.Object({
 const PolicySetParams = Type.Object({
   resource_type: Type.String({ description: 'Resource type: "tool", "file", "exec", or "mcp".' }),
   resource_key: Type.String({ description: 'Resource key. For tools: tool name (e.g. "exec", "mcp__weather__*"). For file: "sandbox:mode:path". For exec: "sandbox:cwd:command". For mcp: server id.' }),
+  effect: Type.Optional(
+    Type.Union([Type.Literal('allow'), Type.Literal('deny'), Type.Literal('require_approval')], {
+      description: 'Policy effect: "allow" (default), "deny", or "require_approval".',
+    }),
+  ),
   grants: Type.Array(
     Type.Object({
       type: Type.Union([Type.Literal('any'), Type.Literal('role'), Type.Literal('user')]),
       value: Type.Optional(Type.String({ description: 'Role name or user ID (required for role/user types).' })),
     }),
-    { description: 'Array of grants. Examples: [{"type":"any"}], [{"type":"role","value":"owner"},{"type":"role","value":"user"}]' },
+    { description: 'Array of grants (who this rule targets). Examples: [{"type":"any"}], [{"type":"role","value":"owner"},{"type":"role","value":"user"}]' },
   ),
   scope: Type.Optional(
     Type.Record(Type.String(), Type.Unknown(), {
@@ -38,6 +43,11 @@ const PolicySetParams = Type.Object({
 const PolicyDeleteParams = Type.Object({
   resource_type: Type.String({ description: 'Resource type.' }),
   resource_key: Type.String({ description: 'Resource key.' }),
+  effect: Type.Optional(
+    Type.Union([Type.Literal('allow'), Type.Literal('deny'), Type.Literal('require_approval')], {
+      description: 'Delete only the row with this effect. Omit to delete all effects for this resource.',
+    }),
+  ),
 });
 
 type PolicyListArgs = Static<typeof PolicyListParams>;
@@ -86,15 +96,17 @@ export const createPolicySetTool = (context: ToolContext): PolicyAwareTool<typeo
         throw new ValidationError(`Grant type "${g.type}" requires a value.`);
       }
     }
+    const effect = args.effect ?? 'allow';
     const record = await context.policyStore.upsert({
       agentId: context.storeScope.agentId,
       resourceType: args.resource_type,
       resourceKey: args.resource_key,
+      effect,
       grants: args.grants,
       scope: (args.scope ?? {}) as Record<string, unknown>,
     });
     return {
-      content: asTextContent(`Policy set: ${args.resource_type}/${args.resource_key} → ${JSON.stringify(args.grants)}\n`),
+      content: asTextContent(`Policy set: ${args.resource_type}/${args.resource_key} [${effect}] → ${JSON.stringify(args.grants)}\n`),
       details: record,
     };
   },
@@ -115,6 +127,7 @@ export const createPolicyDeleteTool = (context: ToolContext): PolicyAwareTool<ty
       context.storeScope.agentId,
       args.resource_type,
       args.resource_key,
+      args.effect,
     );
     if (!existing) {
       throw new ValidationError(`No policy found for ${args.resource_type}/${args.resource_key}.`);
@@ -123,6 +136,7 @@ export const createPolicyDeleteTool = (context: ToolContext): PolicyAwareTool<ty
       context.storeScope.agentId,
       args.resource_type,
       args.resource_key,
+      args.effect,
     );
     return {
       content: asTextContent(`Policy deleted: ${args.resource_type}/${args.resource_key}. Tool reverts to built-in default.\n`),

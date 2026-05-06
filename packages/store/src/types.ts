@@ -49,11 +49,14 @@ export interface SandboxRecord {
   lastSeenAt: string | null;
 }
 
+export type PolicyEffect = 'allow' | 'deny' | 'require_approval';
+
 export interface PolicyRecord {
   id: string;
   agentId: string;
   resourceType: string;
   resourceKey: string;
+  effect: PolicyEffect;
   grants: unknown[];
   scope: Record<string, unknown>;
   createdAt: string;

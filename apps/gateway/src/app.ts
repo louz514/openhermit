@@ -2285,10 +2285,12 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     if (!Array.isArray(body.grants)) {
       throw new ValidationError('grants must be an array');
     }
+    const effect = typeof body.effect === 'string' ? body.effect : 'allow';
     const record = await store.upsert({
       agentId,
       resourceType: body.resourceType,
       resourceKey: body.resourceKey,
+      effect: effect as import('@openhermit/store').PolicyEffect,
       grants: body.grants,
       scope: (typeof body.scope === 'object' && body.scope !== null && !Array.isArray(body.scope))
         ? body.scope as Record<string, unknown>
@@ -2303,9 +2305,10 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     const resourceKey = c.req.param('resourceKey') ?? '';
     await requireOwnerOrAdmin(c, agentId);
     const store = requirePolicyStore();
-    const existing = await store.get(agentId, resourceType, resourceKey);
+    const effect = c.req.query('effect') ?? undefined;
+    const existing = await store.get(agentId, resourceType, resourceKey, effect);
     if (!existing) throw new NotFoundError(`Policy not found: ${resourceType}/${resourceKey}`);
-    await store.delete(agentId, resourceType, resourceKey);
+    await store.delete(agentId, resourceType, resourceKey, effect);
     return c.json({ ok: true });
   });
 

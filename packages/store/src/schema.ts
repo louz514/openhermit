@@ -172,6 +172,7 @@ export const agentPolicies = pgTable('agent_policies', {
   agentId: text('agent_id').notNull(),
   resourceType: text('resource_type').notNull(),
   resourceKey: text('resource_key').notNull(),
+  effect: text('effect').notNull().default('allow'),
   grants: jsonb('grants').$type<unknown[]>().notNull().default([]),
   scope: jsonb('scope').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: text('created_at').notNull(),
