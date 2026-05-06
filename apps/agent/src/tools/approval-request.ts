@@ -43,7 +43,7 @@ type ApprovalReviewArgs = Static<typeof ApprovalReviewParams>;
 // ── Tools ───────────────────────────────────────────────────────────
 
 export const createApprovalListTool = (context: ToolContext): PolicyAwareTool<typeof ApprovalListParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'approval_list',
   label: 'List Approval Requests',
   description: 'List approval requests for this agent. Defaults to showing all requests; filter by status (pending/approved/rejected/expired).',
@@ -68,7 +68,7 @@ export const createApprovalListTool = (context: ToolContext): PolicyAwareTool<ty
 });
 
 export const createApprovalReviewTool = (context: ToolContext): PolicyAwareTool<typeof ApprovalReviewParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'approval_review',
   label: 'Review Approval Request',
   description:

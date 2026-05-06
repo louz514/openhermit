@@ -30,7 +30,7 @@ type WebSearchArgs = Static<typeof WebSearchParams>;
 export const createWebSearchTool = ({
   webProvider,
 }: ToolContext): PolicyAwareTool<typeof WebSearchParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'web_search',
   label: 'Web Search',
   description:

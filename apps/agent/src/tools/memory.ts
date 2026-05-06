@@ -102,7 +102,7 @@ const MemoryDeleteParams = Type.Object({
 type MemoryDeleteArgs = Static<typeof MemoryDeleteParams>;
 
 export const createMemoryGetTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryGetParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'memory_get',
   label: 'Get Memory',
   description:
@@ -148,7 +148,7 @@ const MemoryListParams = Type.Object({
 type MemoryListArgs = Static<typeof MemoryListParams>;
 
 export const createMemoryListTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryListParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'memory_list',
   label: 'List Memory',
   description:
@@ -186,7 +186,7 @@ export const createMemoryListTool = (ctx: ToolContext): PolicyAwareTool<typeof M
 });
 
 export const createMemoryRecallTool = (ctx: ToolContext): PolicyAwareTool<typeof MemoryRecallParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'memory_recall',
   label: 'Recall Memory',
   description:
@@ -230,7 +230,7 @@ export const createMemoryAddTool = ({
   hookBus,
   agentId,
 }: ToolContext): PolicyAwareTool<typeof MemoryAddParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'memory_add',
   label: 'Add Memory',
   description:
@@ -276,7 +276,7 @@ export const createMemoryUpdateTool = ({
   hookBus,
   agentId,
 }: ToolContext): PolicyAwareTool<typeof MemoryUpdateParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'memory_update',
   label: 'Update Memory',
   description:
@@ -318,7 +318,7 @@ export const createMemoryDeleteTool = ({
   memoryProvider,
   storeScope,
 }: ToolContext): PolicyAwareTool<typeof MemoryDeleteParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'memory_delete',
   label: 'Delete Memory',
   description:
@@ -359,7 +359,7 @@ export const createMemorySetGrantsTool = ({
   memoryProvider,
   storeScope,
 }: ToolContext): PolicyAwareTool<typeof MemorySetGrantsParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'memory_set_grants',
   label: 'Set Memory Grants',
   description:

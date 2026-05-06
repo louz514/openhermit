@@ -37,7 +37,7 @@ type SessionSummaryArgs = Static<typeof SessionSummaryParams>;
 // ── Tools ───────────────────────────────────────────────────────────
 
 export const createSessionListTool = (context: ToolContext): PolicyAwareTool<typeof SessionListParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'session_list',
   label: 'List Sessions',
   description: 'List sessions with their descriptions, last activity, message counts, and source. Optionally filter by channel.',
@@ -99,7 +99,7 @@ export const createSessionListTool = (context: ToolContext): PolicyAwareTool<typ
 });
 
 export const createSessionReadTool = (context: ToolContext): PolicyAwareTool<typeof SessionReadParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'session_read',
   label: 'Read Session Messages',
   description: 'Read message history from a specified session. Returns recent user and assistant messages. Use this to review what happened in another session.',
@@ -152,7 +152,7 @@ export const createSessionReadTool = (context: ToolContext): PolicyAwareTool<typ
 });
 
 export const createSessionSummaryTool = (context: ToolContext): PolicyAwareTool<typeof SessionSummaryParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'session_summary',
   label: 'Session Summary',
   description: 'Get a summary of a session: description, working memory, message count, and recent activity. Useful for quickly understanding what happened in a session.',
@@ -253,7 +253,7 @@ export const resolveOutbound = (
 };
 
 export const createSessionSendTool = (context: ToolContext): PolicyAwareTool<typeof SessionSendParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'session_send',
   label: 'Send Message to Session',
   description:

@@ -35,7 +35,7 @@ type WebFetchArgs = Static<typeof WebFetchParams>;
 export const createWebFetchTool = ({
   webProvider,
 }: ToolContext): PolicyAwareTool<typeof WebFetchParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'web_fetch',
   label: 'Web Fetch',
   description:

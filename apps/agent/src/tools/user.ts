@@ -46,7 +46,7 @@ const UserMergeParams = Type.Object({
 type UserMergeArgs = Static<typeof UserMergeParams>;
 
 export const createUserListTool = (context: ToolContext): PolicyAwareTool<typeof UserListParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'user_list',
   label: 'List Users',
   description: 'List all users with their identities and roles.',
@@ -81,7 +81,7 @@ export const createUserListTool = (context: ToolContext): PolicyAwareTool<typeof
 });
 
 export const createUserIdentityLinkTool = (context: ToolContext): PolicyAwareTool<typeof UserIdentityLinkParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'user_identity_link',
   label: 'Link User Identity',
   description: 'Link a channel identity to a user. If the identity already belongs to another user, it will be re-linked to the target user.',
@@ -120,7 +120,7 @@ export const createUserIdentityLinkTool = (context: ToolContext): PolicyAwareToo
 });
 
 export const createUserIdentityUnlinkTool = (context: ToolContext): PolicyAwareTool<typeof UserIdentityUnlinkParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'user_identity_unlink',
   label: 'Unlink User Identity',
   description: 'Remove a channel identity link from its user.',
@@ -147,7 +147,7 @@ export const createUserIdentityUnlinkTool = (context: ToolContext): PolicyAwareT
 });
 
 export const createUserRoleSetTool = (context: ToolContext): PolicyAwareTool<typeof UserRoleSetParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'user_role_set',
   label: 'Set User Role',
   description: 'Change a user\'s role (owner, user, or guest).',
@@ -177,7 +177,7 @@ export const createUserRoleSetTool = (context: ToolContext): PolicyAwareTool<typ
 });
 
 export const createUserMergeTool = (context: ToolContext): PolicyAwareTool<typeof UserMergeParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'user_merge',
   label: 'Merge Users',
   description: 'Merge one user into another. All identities from the source user are moved to the target. The source user is marked as merged and excluded from listings.',
@@ -243,7 +243,7 @@ type IdentityLinkConfirmArgs = Static<typeof IdentityLinkConfirmParams>;
 export const createIdentityLinkRequestTool = (
   context: ToolContext,
 ): PolicyAwareTool<typeof IdentityLinkRequestParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'identity_link_request',
   label: 'Request Identity Link',
   description:
@@ -275,7 +275,7 @@ export const createIdentityLinkRequestTool = (
 export const createIdentityLinkConfirmTool = (
   context: ToolContext,
 ): PolicyAwareTool<typeof IdentityLinkConfirmParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'any' }] },
+  policy: { defaultGrants: [{ type: 'any' }] },
   name: 'identity_link_confirm',
   label: 'Confirm Identity Link',
   description:

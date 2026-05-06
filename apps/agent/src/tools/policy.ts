@@ -56,7 +56,7 @@ type PolicyDeleteArgs = Static<typeof PolicyDeleteParams>;
 // ── Tools ───────────────────────────────────────────────────────────
 
 export const createPolicyListTool = (context: ToolContext): PolicyAwareTool<typeof PolicyListParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'policy_list',
   label: 'List Policies',
   description: 'List access policies for this agent. Shows which roles/users can use each tool.',
@@ -77,7 +77,7 @@ export const createPolicyListTool = (context: ToolContext): PolicyAwareTool<type
 });
 
 export const createPolicySetTool = (context: ToolContext): PolicyAwareTool<typeof PolicySetParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'policy_set',
   label: 'Set Policy',
   description:
@@ -111,7 +111,7 @@ export const createPolicySetTool = (context: ToolContext): PolicyAwareTool<typeo
 });
 
 export const createPolicyDeleteTool = (context: ToolContext): PolicyAwareTool<typeof PolicyDeleteParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'policy_delete',
   label: 'Delete Policy',
   description: 'Remove a custom policy, reverting a resource to its built-in default.',

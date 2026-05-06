@@ -24,7 +24,7 @@ export const createInstructionUpdateTool = ({
   instructionStore,
   storeScope,
 }: ToolContext): PolicyAwareTool<typeof InstructionUpdateParams> => ({
-  policy: { kind: 'fixed', grants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'instruction_update',
   label: 'Update Instruction',
   description:

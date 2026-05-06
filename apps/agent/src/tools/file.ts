@@ -139,7 +139,7 @@ const checkFilePath = async (
 };
 
 export const createFileReadTool = (context: ToolContext): PolicyAwareTool<typeof FileReadParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'file_read',
   label: 'Read File',
   description:
@@ -193,7 +193,7 @@ export const createFileReadTool = (context: ToolContext): PolicyAwareTool<typeof
 });
 
 export const createFileWriteTool = (context: ToolContext): PolicyAwareTool<typeof FileWriteParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'file_write',
   label: 'Write File',
   description:
@@ -215,7 +215,7 @@ export const createFileWriteTool = (context: ToolContext): PolicyAwareTool<typeo
 });
 
 export const createFileListTool = (context: ToolContext): PolicyAwareTool<typeof FileListParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'file_list',
   label: 'List Directory',
   description: 'List entries (files + subdirectories) in a sandbox directory.',
@@ -232,7 +232,7 @@ export const createFileListTool = (context: ToolContext): PolicyAwareTool<typeof
 });
 
 export const createFileStatTool = (context: ToolContext): PolicyAwareTool<typeof FileStatParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }, { type: 'role', value: 'user' }] },
   name: 'file_stat',
   label: 'Stat Path',
   description: 'Inspect a path in a sandbox: type (file/directory), size, last-modified time. Returns null if missing.',
@@ -249,7 +249,7 @@ export const createFileStatTool = (context: ToolContext): PolicyAwareTool<typeof
 });
 
 export const createFileEditTool = (context: ToolContext): PolicyAwareTool<typeof FileEditParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'file_edit',
   label: 'Edit File',
   description:
@@ -290,7 +290,7 @@ export const createFileEditTool = (context: ToolContext): PolicyAwareTool<typeof
 });
 
 export const createFileDeleteTool = (context: ToolContext): PolicyAwareTool<typeof FileDeleteParams> => ({
-  policy: { kind: 'configurable', defaultGrants: [{ type: 'role', value: 'owner' }] },
+  policy: { defaultGrants: [{ type: 'role', value: 'owner' }] },
   name: 'file_delete',
   label: 'Delete File',
   description: 'Delete a single file in a sandbox. Refuses to delete directories (no recursion).',

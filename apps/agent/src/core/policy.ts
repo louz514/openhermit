@@ -40,9 +40,9 @@ export interface PolicyMatch {
 
 // ── Tool policy ─────────────────────────────────────────────────────────
 
-export type ToolPolicy =
-  | { kind: 'fixed'; grants: Grant[] }
-  | { kind: 'configurable'; defaultGrants: Grant[] };
+export interface ToolPolicy {
+  defaultGrants: Grant[];
+}
 
 // ── Core evaluation ─────────────────────────────────────────────────────
 
@@ -119,10 +119,6 @@ export const resolveToolMatches = (
   toolName: string,
   declaredPolicy?: ToolPolicy,
 ): PolicyMatch[] => {
-  if (declaredPolicy?.kind === 'fixed') {
-    return [{ effect: 'allow', grants: declaredPolicy.grants }];
-  }
-
   if (policyRows) {
     const matched = findPolicyRows(policyRows, 'tool', toolName);
     if (matched.length > 0) {
@@ -130,7 +126,7 @@ export const resolveToolMatches = (
     }
   }
 
-  if (declaredPolicy?.kind === 'configurable') {
+  if (declaredPolicy) {
     return [{ effect: 'allow', grants: declaredPolicy.defaultGrants }];
   }
 
@@ -143,20 +139,6 @@ export const resolveToolGrants = (
   toolName: string,
   declaredPolicy?: ToolPolicy,
 ): Grant[] => {
-  if (declaredPolicy) {
-    if (declaredPolicy.kind === 'fixed') return declaredPolicy.grants;
-    if (policyRows) {
-      const rows = policyRows.filter(
-        (r) => r.resourceType === 'tool' && r.effect === 'allow',
-      );
-      const row = rows.find((r) => r.resourceKey === toolName)
-        ?? rows.find(
-          (r) => r.resourceKey.endsWith('*') && toolName.startsWith(r.resourceKey.slice(0, -1)),
-        );
-      if (row) return row.grants as Grant[];
-    }
-    return declaredPolicy.defaultGrants;
-  }
   if (policyRows) {
     const rows = policyRows.filter(
       (r) => r.resourceType === 'tool' && r.effect === 'allow',
@@ -167,6 +149,7 @@ export const resolveToolGrants = (
       );
     if (row) return row.grants as Grant[];
   }
+  if (declaredPolicy) return declaredPolicy.defaultGrants;
   return OPEN;
 };
 
