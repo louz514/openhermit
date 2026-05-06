@@ -106,8 +106,9 @@ export class ApprovalRequiredError extends Error {
 
 /**
  * When evaluateAccess returns 'require_approval', check for an existing
- * approved request. If found, allow. Otherwise create a new request and
- * throw ApprovalRequiredError.
+ * approved request. If found, allow. When approvalCallback is available
+ * (real-time session), use it for in-session approval. Otherwise create
+ * a persistent request and throw ApprovalRequiredError.
  */
 export const checkApprovalOrRequest = async (
   context: ToolContext,
@@ -129,6 +130,37 @@ export const checkApprovalOrRequest = async (
   );
   if (approved) return;
 
+  // Real-time approval: owner is in an interactive session
+  if (context.approvalCallback) {
+    const request = await context.approvalRequestStore.create({
+      agentId: context.storeScope.agentId,
+      sessionId: context.sessionId ?? 'unknown',
+      requesterId: context.currentUserId,
+      resourceType,
+      resourceKey,
+      ...(scope ? { scope } : {}),
+    });
+
+    const decision = await context.approvalCallback(
+      `${resourceType}:${resourceKey}`,
+      request.id,
+      scope ?? {},
+    );
+
+    const dbDecision = decision === 'approved' ? 'approved' : 'rejected';
+    context.approvalRequestStore
+      .resolve(request.id, dbDecision, context.currentUserId, 'once')
+      .catch(() => {});
+
+    if (decision === 'rejected' || decision === 'timed_out' || decision === 'cancelled') {
+      throw new ValidationError(
+        `Access to ${resourceType}/${resourceKey} was ${decision} by the user.`,
+      );
+    }
+    return;
+  }
+
+  // Async approval: create a persistent request for owner to review
   const request = await context.approvalRequestStore.create({
     agentId: context.storeScope.agentId,
     sessionId: context.sessionId ?? 'unknown',
