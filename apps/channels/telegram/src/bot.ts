@@ -86,7 +86,9 @@ export class TelegramBot {
       try {
         const updates = await this.api.getUpdates(this.pollOffset, 30, this.pollAbort.signal);
         for (const update of updates) {
-          await this.handleUpdate(update);
+          // Fire-and-forget so callback_query updates aren't blocked behind
+          // long-running message handlers (which wait for agent_end SSE).
+          void this.handleUpdate(update);
           this.pollOffset = update.update_id + 1;
         }
       } catch (error) {
