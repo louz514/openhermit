@@ -14,13 +14,14 @@ import {
 } from './api';
 import { PickAgentScreen } from './components/PickAgentScreen';
 import { SetupScreen } from './components/SetupScreen';
+import { LandingScreen } from './components/LandingScreen';
 // ChatShell pulls in the markdown + KaTeX stack — keep it out of the
 // initial bundle for users still on Setup/PickAgent.
 const ChatShell = lazy(() => import('./components/ChatShell').then((m) => ({ default: m.ChatShell })));
 import { ToastProvider } from './components/Toast';
 import { useTheme } from './components/ThemeToggle';
 
-type Screen = 'loading' | 'setup' | 'pick-agent' | 'chat';
+type Screen = 'loading' | 'landing' | 'setup' | 'pick-agent' | 'chat';
 
 export function App() {
   // Initialize theme on mount.
@@ -37,7 +38,9 @@ export function App() {
     const displayName = getDisplayName();
     const savedGateway = loadGatewayUrl();
     if (!displayName || !savedGateway) {
-      setScreen('setup');
+      // First-time visitors land on the marketing page; returning users
+      // who only cleared one of the two go straight to setup.
+      setScreen(displayName || savedGateway ? 'setup' : 'landing');
       return;
     }
     setGateway(savedGateway);
@@ -103,10 +106,18 @@ export function App() {
     localStorage.removeItem('openhermit_jwt');
     localStorage.removeItem('openhermit_gateway_url');
     setConn(null);
-    setScreen('setup');
+    setScreen('landing');
   };
 
   if (screen === 'loading') return null;
+
+  if (screen === 'landing') {
+    return (
+      <ToastProvider>
+        <LandingScreen onGetStarted={() => setScreen('setup')} />
+      </ToastProvider>
+    );
+  }
 
   if (screen === 'setup') {
     return (
