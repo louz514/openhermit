@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icon } from './Icon';
 import {
   fetchAgentConfig,
   putAgentConfig,
@@ -203,11 +204,11 @@ export function BasicPanel() {
         {provider && (
           providerHasKey(provider, secrets) ? (
             <p className="basic-panel__hint basic-panel__hint--ok">
-              ✓ API key set: {candidateSecretNames(provider).find((n) => secrets[n]) ?? ''}
+              <Icon name="check" size={12} className="inline-icon" /> API key set: {candidateSecretNames(provider).find((n) => secrets[n]) ?? ''}
             </p>
           ) : (
             <p className="basic-panel__hint basic-panel__hint--warn">
-              ✗ No API key. Add <code>{candidateSecretNames(provider)[0]}</code> in the Secrets tab.
+              <Icon name="x" size={12} className="inline-icon" /> No API key. Add <code>{candidateSecretNames(provider)[0]}</code> in the Secrets tab.
             </p>
           )
         )}
@@ -308,7 +309,7 @@ export function BasicPanel() {
         </select>
         {selectedModelEntry?.reasoning && thinking === 'off' && (
           <p className="basic-panel__hint basic-panel__hint--warn">
-            ⚠️ <strong>{model}</strong> is a thinking model. Setting thinking
+            <Icon name="alert-triangle" size={12} className="inline-icon" /> <strong>{model}</strong> is a thinking model. Setting thinking
             to <code>off</code> on a thinking-only endpoint usually triggers
             <code> 400 reasoning_content must be passed back</code> once the
             session has any tool-call history. Pick a level (low / medium /

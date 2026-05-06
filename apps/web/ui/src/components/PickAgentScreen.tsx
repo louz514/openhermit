@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Icon } from './Icon';
 import {
   exportDeviceKey,
   getDeviceFingerprint,
@@ -126,10 +127,10 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
         {memberships === null && <p className="hint">Loading…</p>}
         {memberships !== null && memberships.length === 0 && (
           <div className="pick-empty">
-            <div className="pick-empty__icon">✨</div>
+            <div className="pick-empty__icon"><Icon name="sparkle" size={28} /></div>
             <h3 className="pick-empty__title">No agents yet</h3>
             <p className="hint">
-              An OpenHermit agent is a persistent AI assistant with its own memory, skills, and
+              An OpenHermit agent is a persistent AI assistant with its own memory, abilities, and
               workspace. You'll need an <strong>agent ID</strong> from your administrator (or
               create one yourself with <code>hermit agents create &lt;id&gt;</code>), then join it
               below.
@@ -323,7 +324,7 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                 Fingerprint: <code style={{ fontSize: 11 }}>{fingerprint ? `${fingerprint.slice(0, 8)}…${fingerprint.slice(-8)}` : '—'}</code>
                 <br />
                 <span style={{ color: 'var(--danger, #b91c1c)' }}>
-                  ⚠ This is your private key. Anyone with it can sign in as you. Save it to a
+                  <Icon name="alert-triangle" size={12} className="inline-icon" /> This is your private key. Anyone with it can sign in as you. Save it to a
                   password manager to add another device — never paste it into chat or email.
                 </span>
               </p>

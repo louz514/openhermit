@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BasicPanel } from './BasicPanel';
+import { Icon, type IconName } from './Icon';
 
 // Each sub-panel pulls its own data + components on first open. BasicPanel
 // stays eager because it's the default tab.
@@ -16,19 +17,19 @@ export type ManageTab = 'basic' | 'secrets' | 'skills' | 'mcp' | 'schedules' | '
 interface TabDef {
   id: ManageTab;
   label: string;
-  icon: string;
+  icon: IconName;
   description: string;
 }
 
 const tabs: TabDef[] = [
-  { id: 'basic', label: 'Basic', icon: '⚙️', description: 'Model, workspace, and core agent configuration.' },
-  { id: 'secrets', label: 'Secrets', icon: '🔑', description: 'API keys and tokens. Encrypted at rest, scoped to this agent.' },
-  { id: 'channels', label: 'Channels', icon: '💬', description: 'Connect Telegram, Discord, Slack, and other inbound surfaces.' },
-  { id: 'skills', label: 'Skills', icon: '🛠', description: 'Reusable capability packages. Enable per agent or fleet-wide.' },
-  { id: 'mcp', label: 'MCP', icon: '🧩', description: 'Model Context Protocol servers exposing external tool collections.' },
-  { id: 'schedules', label: 'Schedules', icon: '⏰', description: 'Cron and one-shot jobs with timeout and concurrency policy.' },
-  { id: 'policies', label: 'Policies', icon: '🛡', description: 'Tool access controls and approval requirements.' },
-  { id: 'approvals', label: 'Approvals', icon: '✋', description: 'Pending tool calls awaiting your decision.' },
+  { id: 'basic', label: 'Basic', icon: 'settings', description: 'Model, workspace, and core agent configuration.' },
+  { id: 'secrets', label: 'Secrets', icon: 'key', description: 'API keys and tokens. Encrypted at rest, scoped to this agent.' },
+  { id: 'channels', label: 'Apps', icon: 'message-square', description: 'Connect Telegram, Discord, Slack, and other places people can message your agent.' },
+  { id: 'skills', label: 'Abilities', icon: 'wand', description: 'Reusable capability packages \u2014 enable per agent or across your fleet.' },
+  { id: 'mcp', label: 'Integrations', icon: 'puzzle', description: 'External tool servers (Model Context Protocol) your agent can call out to.' },
+  { id: 'schedules', label: 'Tasks', icon: 'clock', description: 'Recurring or one-off jobs the agent runs on a schedule.' },
+  { id: 'policies', label: 'Permissions', icon: 'shield', description: 'Control which tools the agent can use, and which require your approval first.' },
+  { id: 'approvals', label: 'Pending requests', icon: 'check-circle', description: 'Tool calls waiting for you to approve or deny.' },
 ];
 
 interface Props {
@@ -48,7 +49,7 @@ export function ManagePanel({ tab, onTabChange }: Props) {
             onClick={() => onTabChange(t.id)}
             title={t.description}
           >
-            <span className="manage__tab-icon">{t.icon}</span>
+            <span className="manage__tab-icon"><Icon name={t.icon} size={16} /></span>
             <span>{t.label}</span>
           </button>
         ))}

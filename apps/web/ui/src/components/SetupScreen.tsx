@@ -10,6 +10,7 @@ import {
   setDisplayName,
   setGateway,
 } from '../api';
+import { BrandMark } from './Icon';
 
 interface Props {
   onComplete: () => void;
@@ -109,7 +110,7 @@ export function SetupScreen({ onComplete }: Props) {
     <div className="center-screen welcome-bg">
       <form className="card card--form welcome-card" onSubmit={handleSubmit}>
         <div className="welcome-hero">
-          <div className="welcome-logo">🜲</div>
+          <div className="welcome-logo"><BrandMark size={32} /></div>
           <p className="eyebrow">OpenHermit</p>
           <h1>{isNew ? 'Welcome aboard' : 'Sign back in'}</h1>
           <p className="hint hint--center">

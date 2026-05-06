@@ -1,4 +1,5 @@
 import { ThemeToggle } from './ThemeToggle';
+import { Icon, BrandMark, type IconName } from './Icon';
 
 interface Props {
   onGetStarted: () => void;
@@ -8,46 +9,46 @@ interface Props {
 const REPO_URL = 'https://github.com/louz514/openhermit';
 
 const HERO_STATS = [
-  { value: '1', label: 'gateway, all agents' },
-  { value: '6', label: 'channels out of the box' },
+  { value: '1', label: 'server, every agent' },
+  { value: '6', label: 'apps out of the box' },
   { value: 'MIT', label: 'open source' },
 ];
 
-const FEATURES = [
+const FEATURES: { icon: IconName; title: string; body: string }[] = [
   {
-    icon: '🚪',
-    title: 'Gateway control plane',
-    body: 'Single Hono server. Agents start, attach, detach without orchestration. Admin UI baked in.',
+    icon: 'door',
+    title: 'One server, every agent',
+    body: 'A single hub starts, attaches, and supervises agents \u2014 no orchestration to wire up. The admin UI is built in.',
   },
   {
-    icon: '🐘',
-    title: 'Postgres-backed state',
-    body: 'Sessions, memories, instructions, skills, MCP, schedules, secrets — durable behind Drizzle.',
+    icon: 'database',
+    title: 'Memory that lasts',
+    body: 'Conversations, memories, instructions, abilities, integrations, tasks, and secrets all live in Postgres \u2014 durable, queryable, backup-able.',
   },
   {
-    icon: '🐳',
-    title: 'Sandboxed execution',
-    body: 'Per-agent sandbox: self-hosted Docker, E2B, or Daytona. Same exec interface across backends.',
+    icon: 'box',
+    title: 'Safe-by-default workspace',
+    body: 'Each agent runs in its own isolated workspace (Docker, E2B, or Daytona). Same interface no matter which one you pick.',
   },
   {
-    icon: '💬',
-    title: 'Channels included',
-    body: 'Telegram, Discord, Slack adapters, plus CLI and Web UI. Enable, disable, reconfigure at runtime.',
+    icon: 'message-square',
+    title: 'Apps you already use',
+    body: 'Telegram, Discord, Slack, plus CLI and Web. Turn them on and off at runtime without restarts.',
   },
   {
-    icon: '🛠',
-    title: 'Skills & MCP',
-    body: 'Install centrally, enable per-agent or fleet-wide, audit from one place.',
+    icon: 'wand',
+    title: 'Abilities & integrations',
+    body: 'Install once, then enable per agent or across the whole fleet. Audit everything from one place.',
   },
   {
-    icon: '👥',
-    title: 'Multi-user with roles',
-    body: 'Owner / user / guest. Identity reconciliation across CLI, web, and channels.',
+    icon: 'users',
+    title: 'Built for teams',
+    body: 'Owner, user, and guest roles. People stay themselves whether they\'re in CLI, web, or a chat app.',
   },
 ];
 
 const COMPARISON = [
-  { area: 'State', file: 'Markdown / JSONL on disk', hermit: 'PostgreSQL, scoped by agent_id' },
+  { area: 'State', file: 'Markdown / JSONL on disk', hermit: 'PostgreSQL, scoped by agent' },
   { area: 'Secrets', file: 'Dotfiles', hermit: 'AES-256-GCM encrypted at rest' },
   { area: 'Fleet ops', file: 'SSH-and-pray', hermit: '`hermit … --all`' },
   { area: 'Workspace', file: 'Local filesystem', hermit: 'Per-agent sandbox (Docker / E2B / Daytona)' },
@@ -69,7 +70,7 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
     <div className="landing">
       <header className="landing__nav">
         <div className="landing__brand">
-          <span className="landing__logo">🜲</span>
+          <span className="landing__logo"><BrandMark size={26} /></span>
           <span className="landing__brand-name">OpenHermit</span>
         </div>
         <nav className="landing__nav-links">
@@ -96,9 +97,9 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
           Agents, but <span className="landing__title-accent">operable</span>.
         </h1>
         <p className="landing__lede">
-          OpenHermit is a control plane for running fleets of AI agents as production
-          services. Durable state, sandboxed execution, multi-user roles, and the channels
-          you already use — managed from a single gateway.
+          OpenHermit is a hub for running AI assistants as real services. Memory that
+          lasts, isolated workspaces, team roles, and the apps you already use — all
+          managed from one place.
         </p>
         <div className="landing__cta">
           <button className="btn btn--primary btn--lg" type="button" onClick={onGetStarted}>
@@ -171,7 +172,7 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
         <div className="landing__features">
           {FEATURES.map((f) => (
             <div className="landing__feature" key={f.title}>
-              <div className="landing__feature-icon">{f.icon}</div>
+              <div className="landing__feature-icon"><Icon name={f.icon} size={22} /></div>
               <h3>{f.title}</h3>
               <p>{f.body}</p>
             </div>
@@ -184,8 +185,8 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
           <p className="landing__eyebrow">Fleet operations</p>
           <h2>Roll changes across every agent with one command.</h2>
           <p className="landing__section-lede">
-            Once internal state is centralized, fleet operations become trivial. Roll out a
-            skill, push a rule, rotate a secret — fan-out is built in.
+            Once everything lives in one place, rolling out an ability, pushing a rule, or
+            rotating a secret is a single command — not a tour of every machine.
           </p>
         </div>
         <pre className="landing__code landing__code--wide">
@@ -206,10 +207,10 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
       </section>
 
       <section className="landing__section landing__cta-section">
-        <h2>Ready to run agents that don't fall apart at scale?</h2>
+        <h2>Ready to run assistants that don't fall apart at scale?</h2>
         <p className="landing__section-lede">
-          Set up takes a few minutes. Postgres, an admin token, and a JWT secret are all
-          you need.
+          Setup takes a few minutes. A database, an admin token, and a signing secret —
+          that's it.
         </p>
         <div className="landing__cta">
           <button className="btn btn--primary btn--lg" type="button" onClick={onGetStarted}>
