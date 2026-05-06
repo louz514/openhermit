@@ -30,41 +30,45 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [connection, setConn] = useState<Connection | null>(null);
   const [gatewayUrl, setGatewayUrl] = useState<string>('');
+  // Where the landing-page CTA should send the user.
+  const [resumeTarget, setResumeTarget] = useState<Exclude<Screen, 'landing' | 'loading'>>('setup');
 
   useEffect(() => {
     initJwt();
 
-    // Need both display name AND a remembered gateway URL to skip setup.
     const displayName = getDisplayName();
     const savedGateway = loadGatewayUrl();
+
+    // First-time visitor: nothing to resume — landing → setup.
     if (!displayName || !savedGateway) {
-      // First-time visitors land on the marketing page; returning users
-      // who only cleared one of the two go straight to setup.
-      setScreen(displayName || savedGateway ? 'setup' : 'landing');
+      setResumeTarget('setup');
+      setScreen('landing');
       return;
     }
     setGateway(savedGateway);
     setGatewayUrl(savedGateway);
 
-    // Try to refresh the JWT silently. If the device key is still valid
-    // for this gateway we go straight to agent picker / last chat.
+    // Returning visitor: silently refresh JWT, then decide whether the
+    // landing CTA should jump to the previous chat, the agent picker,
+    // or fall back to setup if the device key was rejected.
     (async () => {
       try {
         await exchangeToken(displayName);
       } catch {
-        setScreen('setup');
+        setResumeTarget('setup');
+        setScreen('landing');
         return;
       }
 
       const saved = loadConnection();
       if (saved?.agentId) {
-        // Refresh role from server — it may have changed since last visit.
         let role = saved.role;
         try {
           const memberships = await listMyAgents();
           const m = memberships.find((x) => x.agentId === saved.agentId);
           if (!m) {
-            setScreen('pick-agent');
+            setResumeTarget('pick-agent');
+            setScreen('landing');
             return;
           }
           role = m.role;
@@ -75,10 +79,11 @@ export function App() {
         setConn(fresh);
         setConnection(fresh);
         saveConnection(fresh);
-        setScreen('chat');
+        setResumeTarget('chat');
       } else {
-        setScreen('pick-agent');
+        setResumeTarget('pick-agent');
       }
+      setScreen('landing');
     })();
   }, []);
 
@@ -114,7 +119,10 @@ export function App() {
   if (screen === 'landing') {
     return (
       <ToastProvider>
-        <LandingScreen onGetStarted={() => setScreen('setup')} />
+        <LandingScreen
+          resumeTarget={resumeTarget}
+          onGetStarted={() => setScreen(resumeTarget)}
+        />
       </ToastProvider>
     );
   }

@@ -2,6 +2,7 @@ import { ThemeToggle } from './ThemeToggle';
 
 interface Props {
   onGetStarted: () => void;
+  resumeTarget?: 'setup' | 'pick-agent' | 'chat';
 }
 
 const FEATURES = [
@@ -46,7 +47,16 @@ const COMPARISON = [
   { area: 'Multi-tenant', file: 'One human, one machine', hermit: 'Users, roles, identity merge' },
 ];
 
-export function LandingScreen({ onGetStarted }: Props) {
+export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
+  const ctaPrimary =
+    resumeTarget === 'chat'
+      ? 'Resume chat'
+      : resumeTarget === 'pick-agent'
+      ? 'Pick agent'
+      : 'Get started';
+  const ctaNav =
+    resumeTarget === 'setup' ? 'Sign in' : 'Open app';
+
   return (
     <div className="landing">
       <header className="landing__nav">
@@ -67,7 +77,7 @@ export function LandingScreen({ onGetStarted }: Props) {
           </a>
           <ThemeToggle />
           <button className="btn btn--primary btn--sm" type="button" onClick={onGetStarted}>
-            Sign in
+            {ctaNav}
           </button>
         </nav>
       </header>
@@ -84,7 +94,7 @@ export function LandingScreen({ onGetStarted }: Props) {
         </p>
         <div className="landing__cta">
           <button className="btn btn--primary btn--lg" type="button" onClick={onGetStarted}>
-            Get started
+            {ctaPrimary}
           </button>
           <a
             className="btn btn--ghost btn--lg"
@@ -187,7 +197,7 @@ export function LandingScreen({ onGetStarted }: Props) {
         </p>
         <div className="landing__cta">
           <button className="btn btn--primary btn--lg" type="button" onClick={onGetStarted}>
-            Get started
+            {ctaPrimary}
           </button>
           <a
             className="btn btn--ghost btn--lg"
