@@ -12,11 +12,10 @@ import {
 import type { ExecBackend, FileWriteMode } from '../core/index.js';
 import {
   type FileMode,
-  type Grant,
   type PolicyRow,
   buildPrincipal,
-  canAccess,
-  resolveFilePathGrants,
+  evaluateAccess,
+  resolveFilePathMatches,
 } from '../core/policy.js';
 
 const SANDBOX_ARG = Type.Optional(
@@ -117,13 +116,17 @@ const checkFilePath = async (
     cachedFileRows = { agentId: context.agentId, rows };
   }
 
-  const grants = resolveFilePathGrants(cachedFileRows.rows, sandboxAlias, mode, path);
-  if (grants === undefined) return; // no file rows → tool-level policy is sufficient
+  const matches = resolveFilePathMatches(cachedFileRows.rows, sandboxAlias, mode, path);
+  if (matches === undefined) return; // no file rows → tool-level policy is sufficient
 
   const principal = context.agentId
     ? buildPrincipal(context.agentId, context.currentUserId, context.currentUserRole)
     : undefined;
-  if (!principal || !canAccess(principal, grants)) {
+  if (!principal) {
+    throw new ValidationError(`Access denied: ${mode} ${path} (sandbox: ${sandboxAlias})`);
+  }
+  const decision = evaluateAccess(principal, matches, 'deny');
+  if (decision !== 'allow') {
     throw new ValidationError(`Access denied: ${mode} ${path} (sandbox: ${sandboxAlias})`);
   }
 };

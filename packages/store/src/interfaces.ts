@@ -238,12 +238,14 @@ export interface PolicyStore {
     agentId: string,
     resourceType: string,
     resourceKey: string,
+    effect?: string,
   ): Promise<PolicyRecord | undefined>;
   upsert(record: Omit<PolicyRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<PolicyRecord>;
   delete(
     agentId: string,
     resourceType: string,
     resourceKey: string,
+    effect?: string,
   ): Promise<void>;
 }
 

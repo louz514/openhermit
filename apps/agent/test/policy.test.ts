@@ -4,13 +4,19 @@ import { test } from 'node:test';
 import {
   buildPrincipal,
   canAccess,
+  evaluateAccess,
   matchesGrant,
   parseMcpServerId,
   resolveExecGrants,
+  resolveExecMatches,
   resolveFilePathGrants,
+  resolveFilePathMatches,
   resolveMcpGrants,
+  resolveMcpMatches,
   resolveToolGrants,
+  resolveToolMatches,
   type Grant,
+  type PolicyMatch,
   type PolicyRow,
   type Principal,
   type ToolPolicy,
@@ -64,6 +70,48 @@ test('canAccess: empty grants array denies everyone', () => {
   assert.ok(!canAccess({ agentId: 'a', role: 'owner' }, []));
 });
 
+// ── evaluateAccess ─────────────────────────────────────────────────────
+
+test('evaluateAccess: deny wins over allow', () => {
+  const matches: PolicyMatch[] = [
+    { effect: 'allow', grants: [{ type: 'any' }] },
+    { effect: 'deny', grants: [{ type: 'role', value: 'guest' }] },
+  ];
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches), 'allow');
+});
+
+test('evaluateAccess: require_approval wins over allow', () => {
+  const matches: PolicyMatch[] = [
+    { effect: 'allow', grants: [{ type: 'any' }] },
+    { effect: 'require_approval', grants: [{ type: 'role', value: 'user' }] },
+  ];
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'user' }, matches), 'require_approval');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches), 'allow');
+});
+
+test('evaluateAccess: deny wins over require_approval', () => {
+  const matches: PolicyMatch[] = [
+    { effect: 'require_approval', grants: [{ type: 'any' }] },
+    { effect: 'deny', grants: [{ type: 'role', value: 'guest' }] },
+  ];
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'user' }, matches), 'require_approval');
+});
+
+test('evaluateAccess: returns default when no grants match', () => {
+  const matches: PolicyMatch[] = [
+    { effect: 'allow', grants: [{ type: 'role', value: 'owner' }] },
+  ];
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches), 'allow'); // default
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches, 'deny'), 'deny');
+});
+
+test('evaluateAccess: empty matches returns default', () => {
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, []), 'allow');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, [], 'deny'), 'deny');
+});
+
 // ── Tools without declared policy default to open ───────────────────────
 
 test('tools without declared policy default to open', () => {
@@ -79,6 +127,7 @@ test('resolveToolGrants: DB row overrides default', () => {
     resourceType: 'tool',
     scope: {},
     resourceKey: 'exec',
+    effect: 'allow',
     grants: [{ type: 'any' }],
   }];
   const grants = resolveToolGrants(rows, 'exec');
@@ -99,6 +148,7 @@ test('resolveToolGrants: prefix pattern matches MCP tools', () => {
     resourceType: 'tool',
     scope: {},
     resourceKey: 'mcp__weather__*',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
   }];
   const grants = resolveToolGrants(rows, 'mcp__weather__get_forecast');
@@ -112,6 +162,7 @@ test('resolveToolGrants: prefix pattern does not match unrelated tools', () => {
     resourceType: 'tool',
     scope: {},
     resourceKey: 'mcp__weather__*',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
   }];
   const grants = resolveToolGrants(rows, 'mcp__calendar__list');
@@ -124,18 +175,18 @@ test('resolveToolGrants: exact match takes priority over prefix', () => {
     {
       agentId: 'a', resourceType: 'tool', scope: {},
       resourceKey: 'mcp__weather__*',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
     },
     {
       agentId: 'a', resourceType: 'tool', scope: {},
       resourceKey: 'mcp__weather__public_status',
+      effect: 'allow',
       grants: [{ type: 'any' }],
     },
   ];
-  // Exact match → open to everyone
   const grants = resolveToolGrants(rows, 'mcp__weather__public_status');
   assert.ok(canAccess({ agentId: 'a', role: 'guest' }, grants));
-  // Other tools in same prefix → owner only
   const grants2 = resolveToolGrants(rows, 'mcp__weather__get_forecast');
   assert.ok(!canAccess({ agentId: 'a', role: 'guest' }, grants2));
 });
@@ -165,10 +216,10 @@ test('resolveToolGrants: fixed policy ignores DB rows', () => {
     resourceType: 'tool',
     scope: {},
     resourceKey: 'my_tool',
+    effect: 'allow',
     grants: [{ type: 'any' }],
   }];
   const grants = resolveToolGrants(rows, 'my_tool', fixedPolicy);
-  // Fixed policy should NOT be overridden by DB row
   assert.ok(!canAccess({ agentId: 'a', role: 'guest' }, grants));
   assert.ok(canAccess({ agentId: 'a', role: 'owner' }, grants));
 });
@@ -183,10 +234,10 @@ test('resolveToolGrants: configurable policy uses DB row when present', () => {
     resourceType: 'tool',
     scope: {},
     resourceKey: 'my_tool',
+    effect: 'allow',
     grants: [{ type: 'any' }],
   }];
   const grants = resolveToolGrants(rows, 'my_tool', configurablePolicy);
-  // DB row should override the default
   assert.ok(canAccess({ agentId: 'a', role: 'guest' }, grants));
 });
 
@@ -200,6 +251,28 @@ test('resolveToolGrants: configurable policy falls back to defaultGrants', () =>
   assert.ok(canAccess({ agentId: 'a', role: 'owner' }, grants));
 });
 
+// ── resolveToolMatches with effects ────────────────────────────────────
+
+test('resolveToolMatches: deny row blocks even with allow', () => {
+  const rows: PolicyRow[] = [
+    { agentId: 'a', resourceType: 'tool', scope: {}, resourceKey: 'exec', effect: 'allow', grants: [{ type: 'any' }] },
+    { agentId: 'a', resourceType: 'tool', scope: {}, resourceKey: 'exec', effect: 'deny', grants: [{ type: 'role', value: 'guest' }] },
+  ];
+  const matches = resolveToolMatches(rows, 'exec');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches), 'allow');
+});
+
+test('resolveToolMatches: require_approval effect', () => {
+  const rows: PolicyRow[] = [
+    { agentId: 'a', resourceType: 'tool', scope: {}, resourceKey: 'exec', effect: 'require_approval', grants: [{ type: 'role', value: 'user' }] },
+    { agentId: 'a', resourceType: 'tool', scope: {}, resourceKey: 'exec', effect: 'allow', grants: [{ type: 'role', value: 'owner' }] },
+  ];
+  const matches = resolveToolMatches(rows, 'exec');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'user' }, matches), 'require_approval');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches), 'allow');
+});
+
 // ── resolveFilePathGrants ─────────────────────────────────────────────
 
 test('resolveFilePathGrants: returns undefined when no file rows', () => {
@@ -209,6 +282,7 @@ test('resolveFilePathGrants: returns undefined when no file rows', () => {
 test('resolveFilePathGrants: matches path prefix', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'user' }],
     scope: { sandbox: 'primary', mode: 'read', path: '/workspace/' },
   }];
@@ -220,11 +294,13 @@ test('resolveFilePathGrants: longest prefix wins', () => {
   const rows: PolicyRow[] = [
     {
       agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/',
+      effect: 'allow',
       grants: [{ type: 'any' }],
       scope: { sandbox: 'primary', mode: 'read', path: '/workspace/' },
     },
     {
       agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/private/',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
       scope: { sandbox: 'primary', mode: 'read', path: '/workspace/private/' },
     },
@@ -238,6 +314,7 @@ test('resolveFilePathGrants: longest prefix wins', () => {
 test('resolveFilePathGrants: wildcard sandbox matches any', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'file', resourceKey: '*:read:/workspace/',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: '*', mode: 'read', path: '/workspace/' },
   }];
@@ -248,6 +325,7 @@ test('resolveFilePathGrants: wildcard sandbox matches any', () => {
 test('resolveFilePathGrants: mode must match', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', mode: 'read', path: '/workspace/' },
   }];
@@ -258,11 +336,32 @@ test('resolveFilePathGrants: mode must match', () => {
 test('resolveFilePathGrants: no matching path denies', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/public/',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', mode: 'read', path: '/workspace/public/' },
   }];
   const grants = resolveFilePathGrants(rows, 'primary', 'read', '/workspace/private/foo.txt');
   assert.deepEqual(grants, []);
+});
+
+// ── resolveFilePathMatches with effects ─────────────────────────────────
+
+test('resolveFilePathMatches: deny effect on file path', () => {
+  const rows: PolicyRow[] = [
+    {
+      agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/',
+      effect: 'allow', grants: [{ type: 'any' }],
+      scope: { sandbox: 'primary', mode: 'read', path: '/workspace/' },
+    },
+    {
+      agentId: 'a', resourceType: 'file', resourceKey: 'primary:read:/workspace/secret/',
+      effect: 'deny', grants: [{ type: 'role', value: 'guest' }],
+      scope: { sandbox: 'primary', mode: 'read', path: '/workspace/secret/' },
+    },
+  ];
+  const matches = resolveFilePathMatches(rows, 'primary', 'read', '/workspace/secret/key.txt')!;
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches, 'deny'), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches, 'deny'), 'allow');
 });
 
 // ── resolveExecGrants ─────────────────────────────────────────────────
@@ -274,6 +373,7 @@ test('resolveExecGrants: returns undefined when no exec rows', () => {
 test('resolveExecGrants: wildcard command allows anything', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
     scope: { sandbox: 'primary', command: '*' },
   }];
@@ -284,6 +384,7 @@ test('resolveExecGrants: wildcard command allows anything', () => {
 test('resolveExecGrants: exact command match', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:git status',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: 'git status' },
   }];
@@ -294,6 +395,7 @@ test('resolveExecGrants: exact command match', () => {
 test('resolveExecGrants: normalizes whitespace', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:git status',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: 'git status' },
   }];
@@ -304,6 +406,7 @@ test('resolveExecGrants: normalizes whitespace', () => {
 test('resolveExecGrants: different command denied', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:git status',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: 'git status' },
   }];
@@ -314,6 +417,7 @@ test('resolveExecGrants: different command denied', () => {
 test('resolveExecGrants: wildcard sandbox matches any', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: '*:*',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
     scope: { sandbox: '*', command: '*' },
   }];
@@ -324,6 +428,7 @@ test('resolveExecGrants: wildcard sandbox matches any', () => {
 test('resolveExecGrants: sandbox mismatch denied', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:git status',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: 'git status' },
   }];
@@ -336,6 +441,7 @@ test('resolveExecGrants: sandbox mismatch denied', () => {
 test('resolveExecGrants: rows without cwd match any cwd', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
     scope: { sandbox: 'primary', command: '*' },
   }];
@@ -346,6 +452,7 @@ test('resolveExecGrants: rows without cwd match any cwd', () => {
 test('resolveExecGrants: cwd prefix match', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:*',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: '*', cwd: '/workspace/' },
   }];
@@ -356,6 +463,7 @@ test('resolveExecGrants: cwd prefix match', () => {
 test('resolveExecGrants: cwd mismatch denied', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:*',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: { sandbox: 'primary', command: '*', cwd: '/workspace/' },
   }];
@@ -367,19 +475,19 @@ test('resolveExecGrants: cwd-scoped row wins over no-cwd row', () => {
   const rows: PolicyRow[] = [
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
       scope: { sandbox: 'primary', command: '*' },
     },
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:*',
+      effect: 'allow',
       grants: [{ type: 'any' }],
       scope: { sandbox: 'primary', command: '*', cwd: '/workspace/' },
     },
   ];
-  // cwd-scoped row is more specific
   const g1 = resolveExecGrants(rows, 'primary', 'ls', '/workspace/project');
   assert.deepEqual(g1, [{ type: 'any' }]);
-  // Outside cwd scope, falls back to no-cwd row
   const g2 = resolveExecGrants(rows, 'primary', 'ls', '/etc');
   assert.deepEqual(g2, [{ type: 'role', value: 'owner' }]);
 });
@@ -388,11 +496,13 @@ test('resolveExecGrants: exact command + cwd beats wildcard command + cwd', () =
   const rows: PolicyRow[] = [
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:*',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
       scope: { sandbox: 'primary', command: '*', cwd: '/workspace/' },
     },
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:npm test',
+      effect: 'allow',
       grants: [{ type: 'any' }],
       scope: { sandbox: 'primary', command: 'npm test', cwd: '/workspace/' },
     },
@@ -407,18 +517,39 @@ test('resolveExecGrants: cwd scope skipped when no cwd provided', () => {
   const rows: PolicyRow[] = [
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
       scope: { sandbox: 'primary', command: '*' },
     },
     {
       agentId: 'a', resourceType: 'exec', resourceKey: 'primary:/workspace/:*',
+      effect: 'allow',
       grants: [{ type: 'any' }],
       scope: { sandbox: 'primary', command: '*', cwd: '/workspace/' },
     },
   ];
-  // No cwd passed → cwd-scoped row is skipped
   const grants = resolveExecGrants(rows, 'primary', 'ls');
   assert.deepEqual(grants, [{ type: 'role', value: 'owner' }]);
+});
+
+// ── resolveExecMatches with effects ────────────────────────────────────
+
+test('resolveExecMatches: deny effect on exec command', () => {
+  const rows: PolicyRow[] = [
+    {
+      agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+      effect: 'allow', grants: [{ type: 'role', value: 'owner' }],
+      scope: { sandbox: 'primary', command: '*' },
+    },
+    {
+      agentId: 'a', resourceType: 'exec', resourceKey: 'primary:*',
+      effect: 'deny', grants: [{ type: 'role', value: 'guest' }],
+      scope: { sandbox: 'primary', command: '*' },
+    },
+  ];
+  const matches = resolveExecMatches(rows, 'primary', 'ls')!;
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches, 'deny'), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches, 'deny'), 'allow');
 });
 
 // ── parseMcpServerId ─────────────────────────────────────────────────
@@ -447,6 +578,7 @@ test('resolveMcpGrants: returns undefined when no mcp rows', () => {
 test('resolveMcpGrants: exact server match', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'mcp', resourceKey: 'weather',
+    effect: 'allow',
     grants: [{ type: 'role', value: 'owner' }],
     scope: {},
   }];
@@ -456,6 +588,7 @@ test('resolveMcpGrants: exact server match', () => {
 test('resolveMcpGrants: wildcard matches any server', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'mcp', resourceKey: '*',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: {},
   }];
@@ -466,11 +599,13 @@ test('resolveMcpGrants: exact match takes priority over wildcard', () => {
   const rows: PolicyRow[] = [
     {
       agentId: 'a', resourceType: 'mcp', resourceKey: '*',
+      effect: 'allow',
       grants: [{ type: 'any' }],
       scope: {},
     },
     {
       agentId: 'a', resourceType: 'mcp', resourceKey: 'secret-server',
+      effect: 'allow',
       grants: [{ type: 'role', value: 'owner' }],
       scope: {},
     },
@@ -482,8 +617,21 @@ test('resolveMcpGrants: exact match takes priority over wildcard', () => {
 test('resolveMcpGrants: no matching server denied', () => {
   const rows: PolicyRow[] = [{
     agentId: 'a', resourceType: 'mcp', resourceKey: 'weather',
+    effect: 'allow',
     grants: [{ type: 'any' }],
     scope: {},
   }];
   assert.deepEqual(resolveMcpGrants(rows, 'calendar'), []);
+});
+
+// ── resolveMcpMatches with effects ──────────────────────────────────
+
+test('resolveMcpMatches: deny effect on mcp server', () => {
+  const rows: PolicyRow[] = [
+    { agentId: 'a', resourceType: 'mcp', resourceKey: '*', effect: 'allow', grants: [{ type: 'any' }], scope: {} },
+    { agentId: 'a', resourceType: 'mcp', resourceKey: 'secret', effect: 'deny', grants: [{ type: 'role', value: 'guest' }], scope: {} },
+  ];
+  const matches = resolveMcpMatches(rows, 'secret')!;
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'guest' }, matches, 'deny'), 'deny');
+  assert.equal(evaluateAccess({ agentId: 'a', role: 'owner' }, matches, 'deny'), 'allow');
 });

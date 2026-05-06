@@ -18,10 +18,10 @@ import {
   DockerContainerManager,
   ExecBackendManager,
   buildPrincipal,
-  canAccess,
+  evaluateAccess,
   parseMcpServerId,
-  resolveMcpGrants,
-  resolveToolGrants,
+  resolveMcpMatches,
+  resolveToolMatches,
   type AgentConfig,
   type PolicyRow,
 } from './core/index.js';
@@ -1573,11 +1573,12 @@ export class AgentRunner implements SessionRuntime {
       ? await this.options.policyStore.list(this.scope.agentId, 'mcp')
       : undefined;
     const filteredTools = tools.filter((t: any) => {
-      if (!canAccess(principal, resolveToolGrants(policyRows, t.name, t.policy))) return false;
+      const toolMatches = resolveToolMatches(policyRows, t.name, t.policy);
+      if (evaluateAccess(principal, toolMatches) !== 'allow') return false;
       const serverId = parseMcpServerId(t.name);
       if (serverId && mcpRows) {
-        const mcpGrants = resolveMcpGrants(mcpRows, serverId);
-        if (mcpGrants !== undefined && !canAccess(principal, mcpGrants)) return false;
+        const mcpMatches = resolveMcpMatches(mcpRows, serverId);
+        if (mcpMatches !== undefined && evaluateAccess(principal, mcpMatches) !== 'allow') return false;
       }
       return true;
     });

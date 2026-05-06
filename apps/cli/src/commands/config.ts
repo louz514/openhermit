@@ -209,7 +209,8 @@ export const registerConfigCommand = (program: Command): void => {
           const scope = p.scope && typeof p.scope === 'object' && Object.keys(p.scope as Record<string, unknown>).length > 0
             ? ` scope=${JSON.stringify(p.scope)}`
             : '';
-          console.log(`  ${p.resourceType}/${p.resourceKey}${scope}`);
+          const effect = p.effect && p.effect !== 'allow' ? ` [${p.effect}]` : '';
+          console.log(`  ${p.resourceType}/${p.resourceKey}${effect}${scope}`);
           console.log(`    grants: ${JSON.stringify(p.grants)}`);
         }
       } catch (error) {
@@ -221,10 +222,11 @@ export const registerConfigCommand = (program: Command): void => {
     .command('set <resource-key> <grants-json>')
     .description('Set a tool policy (e.g. hermit config policy set exec \'[{"type":"any"}]\')')
     .option('--resource-type <type>', 'Resource type', 'tool')
+    .option('--effect <effect>', 'Policy effect: allow, deny, or require_approval', 'allow')
     .option('--scope <json>', 'Scope JSON object')
     .action(async function (this: Command, resourceKey: string, grantsJson: string) {
       const agentId = resolveAgentId(this);
-      const opts = this.opts() as { resourceType: string; scope?: string };
+      const opts = this.opts() as { resourceType: string; effect: string; scope?: string };
       try {
         let grants: unknown[];
         try {
@@ -247,10 +249,11 @@ export const registerConfigCommand = (program: Command): void => {
         await gateway.upsertPolicy(agentId, {
           resourceType: opts.resourceType,
           resourceKey,
+          effect: opts.effect,
           grants,
           scope,
         });
-        console.log(`Policy set: ${opts.resourceType}/${resourceKey} → ${grantsJson}`);
+        console.log(`Policy set: ${opts.resourceType}/${resourceKey} [${opts.effect}] → ${grantsJson}`);
       } catch (error) {
         handleError(error);
       }
@@ -260,12 +263,13 @@ export const registerConfigCommand = (program: Command): void => {
     .command('delete <resource-key>')
     .description('Delete a tool policy')
     .option('--resource-type <type>', 'Resource type', 'tool')
+    .option('--effect <effect>', 'Delete only this effect (omit to delete all)')
     .action(async function (this: Command, resourceKey: string) {
       const agentId = resolveAgentId(this);
-      const opts = this.opts() as { resourceType: string };
+      const opts = this.opts() as { resourceType: string; effect?: string };
       try {
         const gateway = createGateway();
-        await gateway.deletePolicy(agentId, opts.resourceType, resourceKey);
+        await gateway.deletePolicy(agentId, opts.resourceType, resourceKey, opts.effect);
         console.log(`Policy deleted: ${opts.resourceType}/${resourceKey}`);
       } catch (error) {
         handleError(error);

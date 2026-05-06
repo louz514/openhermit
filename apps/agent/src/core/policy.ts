@@ -15,14 +15,27 @@ export interface Principal {
   agentId: string;
 }
 
+// ── Effect & decision ──────────────────────────────────────────────────
+
+export type PolicyEffect = 'allow' | 'deny' | 'require_approval';
+export type AccessDecision = 'allow' | 'deny' | 'require_approval';
+
 // ── PolicyRow (matches DB shape) ────────────────────────────────────────
 
 export interface PolicyRow {
   agentId: string;
   resourceType: string;
   resourceKey: string;
+  effect: PolicyEffect;
   grants: unknown[];
   scope: Record<string, unknown>;
+}
+
+// ── PolicyMatch (resolved from rows) ───────────────────────────────────
+
+export interface PolicyMatch {
+  effect: PolicyEffect;
+  grants: Grant[];
 }
 
 // ── Tool policy ─────────────────────────────────────────────────────────
@@ -47,29 +60,80 @@ export const matchesGrant = (principal: Principal, grant: Grant): boolean => {
 export const canAccess = (principal: Principal, grants: Grant[]): boolean =>
   grants.some((g) => matchesGrant(principal, g));
 
+/**
+ * Evaluate access given a principal and a set of matched policy rows.
+ * Priority: deny > require_approval > allow.
+ * Returns the default decision if no match has a matching grant.
+ */
+export const evaluateAccess = (
+  principal: Principal,
+  matches: PolicyMatch[],
+  defaultDecision: AccessDecision = 'allow',
+): AccessDecision => {
+  let hasAllow = false;
+  let hasRequireApproval = false;
+
+  for (const m of matches) {
+    if (!canAccess(principal, m.grants)) continue;
+    if (m.effect === 'deny') return 'deny';
+    if (m.effect === 'require_approval') hasRequireApproval = true;
+    if (m.effect === 'allow') hasAllow = true;
+  }
+
+  if (hasRequireApproval) return 'require_approval';
+  if (hasAllow) return 'allow';
+  return defaultDecision;
+};
+
 const OPEN: Grant[] = [{ type: 'any' }];
 
 // ── Resolution helpers ──────────────────────────────────────────────────
 
-const findPolicyRow = (
+const findPolicyRows = (
   rows: PolicyRow[],
   resourceType: string,
   key: string,
-): PolicyRow | undefined => {
-  // Exact match first
-  const exact = rows.find(
+): PolicyRow[] => {
+  // Exact matches
+  const exact = rows.filter(
     (r) => r.resourceType === resourceType && r.resourceKey === key,
   );
-  if (exact) return exact;
-  // Prefix match: resourceKey ending with '*' (e.g. "mcp__weather__*")
-  return rows.find(
+  // Prefix matches (resource_key ending with '*')
+  const prefix = rows.filter(
     (r) =>
       r.resourceType === resourceType &&
       r.resourceKey.endsWith('*') &&
-      key.startsWith(r.resourceKey.slice(0, -1)),
+      key.startsWith(r.resourceKey.slice(0, -1)) &&
+      !exact.some((e) => e.effect === r.effect),
   );
+  // Exact takes priority per-effect; include prefix only for effects not covered by exact
+  return [...exact, ...prefix];
 };
 
+export const resolveToolMatches = (
+  policyRows: PolicyRow[] | undefined,
+  toolName: string,
+  declaredPolicy?: ToolPolicy,
+): PolicyMatch[] => {
+  if (declaredPolicy?.kind === 'fixed') {
+    return [{ effect: 'allow', grants: declaredPolicy.grants }];
+  }
+
+  if (policyRows) {
+    const matched = findPolicyRows(policyRows, 'tool', toolName);
+    if (matched.length > 0) {
+      return matched.map((r) => ({ effect: r.effect, grants: r.grants as Grant[] }));
+    }
+  }
+
+  if (declaredPolicy?.kind === 'configurable') {
+    return [{ effect: 'allow', grants: declaredPolicy.defaultGrants }];
+  }
+
+  return [{ effect: 'allow', grants: OPEN }];
+};
+
+/** @deprecated Use resolveToolMatches + evaluateAccess instead. */
 export const resolveToolGrants = (
   policyRows: PolicyRow[] | undefined,
   toolName: string,
@@ -78,13 +142,25 @@ export const resolveToolGrants = (
   if (declaredPolicy) {
     if (declaredPolicy.kind === 'fixed') return declaredPolicy.grants;
     if (policyRows) {
-      const row = findPolicyRow(policyRows, 'tool', toolName);
+      const rows = policyRows.filter(
+        (r) => r.resourceType === 'tool' && r.effect === 'allow',
+      );
+      const row = rows.find((r) => r.resourceKey === toolName)
+        ?? rows.find(
+          (r) => r.resourceKey.endsWith('*') && toolName.startsWith(r.resourceKey.slice(0, -1)),
+        );
       if (row) return row.grants as Grant[];
     }
     return declaredPolicy.defaultGrants;
   }
   if (policyRows) {
-    const row = findPolicyRow(policyRows, 'tool', toolName);
+    const rows = policyRows.filter(
+      (r) => r.resourceType === 'tool' && r.effect === 'allow',
+    );
+    const row = rows.find((r) => r.resourceKey === toolName)
+      ?? rows.find(
+        (r) => r.resourceKey.endsWith('*') && toolName.startsWith(r.resourceKey.slice(0, -1)),
+      );
     if (row) return row.grants as Grant[];
   }
   return OPEN;
@@ -109,10 +185,42 @@ const parseFileScope = (row: PolicyRow): FileScope | undefined => {
 };
 
 /**
- * Resolve file path-level grants. Returns undefined if no file policy rows
- * exist (caller should fall back to tool-level policy). Returns Grant[] if
- * a matching row is found. Returns empty [] (deny) if rows exist but none match.
+ * Resolve file path-level matches. Returns undefined if no file rows exist
+ * (caller should fall back to tool-level policy). Returns PolicyMatch[] with
+ * all matching rows for the path (across effects).
  */
+export const resolveFilePathMatches = (
+  fileRows: PolicyRow[],
+  sandbox: string,
+  mode: FileMode,
+  path: string,
+): PolicyMatch[] | undefined => {
+  if (fileRows.length === 0) return undefined;
+
+  // Group by effect, find best (longest prefix) per effect
+  const bestByEffect = new Map<PolicyEffect, { row: PolicyRow; len: number }>();
+
+  for (const row of fileRows) {
+    const scope = parseFileScope(row);
+    if (!scope) continue;
+    if (scope.mode !== mode) continue;
+    if (scope.sandbox !== '*' && scope.sandbox !== sandbox) continue;
+    if (!path.startsWith(scope.path)) continue;
+    const effect = (row.effect ?? 'allow') as PolicyEffect;
+    const existing = bestByEffect.get(effect);
+    if (!existing || scope.path.length > existing.len) {
+      bestByEffect.set(effect, { row, len: scope.path.length });
+    }
+  }
+
+  if (bestByEffect.size === 0) return [];
+  return [...bestByEffect.values()].map(({ row }) => ({
+    effect: (row.effect ?? 'allow') as PolicyEffect,
+    grants: row.grants as Grant[],
+  }));
+};
+
+/** @deprecated Use resolveFilePathMatches + evaluateAccess instead. */
 export const resolveFilePathGrants = (
   fileRows: PolicyRow[],
   sandbox: string,
@@ -125,12 +233,12 @@ export const resolveFilePathGrants = (
   let bestLen = -1;
 
   for (const row of fileRows) {
+    if (row.effect !== 'allow') continue;
     const scope = parseFileScope(row);
     if (!scope) continue;
     if (scope.mode !== mode) continue;
     if (scope.sandbox !== '*' && scope.sandbox !== sandbox) continue;
     if (!path.startsWith(scope.path)) continue;
-    // Longer path prefix = more specific match
     if (scope.path.length > bestLen) {
       bestLen = scope.path.length;
       bestMatch = row;
@@ -147,22 +255,20 @@ const normalizeCommand = (cmd: string): string =>
   cmd.trim().replace(/\s+/g, ' ');
 
 /**
- * Resolve exec command-level grants. Returns undefined if no exec policy
- * rows exist (caller should fall back to tool-level policy). Returns Grant[]
- * if a matching row is found. Returns empty [] (deny) if rows exist but none match.
+ * Resolve exec command-level matches. Returns undefined if no exec rows
+ * exist (caller should fall back to tool-level policy). Returns PolicyMatch[]
+ * with all matching rows for the command (across effects).
  */
-export const resolveExecGrants = (
+export const resolveExecMatches = (
   execRows: PolicyRow[],
   sandbox: string,
   command: string,
   cwd?: string,
-): Grant[] | undefined => {
+): PolicyMatch[] | undefined => {
   if (execRows.length === 0) return undefined;
 
   const normalized = normalizeCommand(command);
-
-  let bestMatch: PolicyRow | undefined;
-  let bestSpecificity = -1;
+  const bestByEffect = new Map<PolicyEffect, { row: PolicyRow; specificity: number }>();
 
   for (const row of execRows) {
     const s = row.scope;
@@ -179,7 +285,53 @@ export const resolveExecGrants = (
     const commandMatch = s.command === '*' || normalizeCommand(s.command) === normalized;
     if (!commandMatch) continue;
 
-    // Specificity: exact command > wildcard, cwd-scoped > no cwd
+    let specificity = 0;
+    if (s.command !== '*') specificity += 2;
+    if (cwdScope && cwdScope !== '*') specificity += 1;
+
+    const effect = (row.effect ?? 'allow') as PolicyEffect;
+    const existing = bestByEffect.get(effect);
+    if (!existing || specificity > existing.specificity) {
+      bestByEffect.set(effect, { row, specificity });
+    }
+  }
+
+  if (bestByEffect.size === 0) return [];
+  return [...bestByEffect.values()].map(({ row }) => ({
+    effect: (row.effect ?? 'allow') as PolicyEffect,
+    grants: row.grants as Grant[],
+  }));
+};
+
+/** @deprecated Use resolveExecMatches + evaluateAccess instead. */
+export const resolveExecGrants = (
+  execRows: PolicyRow[],
+  sandbox: string,
+  command: string,
+  cwd?: string,
+): Grant[] | undefined => {
+  if (execRows.length === 0) return undefined;
+
+  const normalized = normalizeCommand(command);
+  let bestMatch: PolicyRow | undefined;
+  let bestSpecificity = -1;
+
+  for (const row of execRows) {
+    if (row.effect !== 'allow') continue;
+    const s = row.scope;
+    if (typeof s.sandbox !== 'string' || typeof s.command !== 'string') continue;
+    if (s.sandbox !== '*' && s.sandbox !== sandbox) continue;
+
+    const cwdScope = typeof s.cwd === 'string' ? s.cwd : undefined;
+    if (cwdScope && cwdScope !== '*' && cwd) {
+      if (!cwd.startsWith(cwdScope)) continue;
+    } else if (cwdScope && cwdScope !== '*' && !cwd) {
+      continue;
+    }
+
+    const commandMatch = s.command === '*' || normalizeCommand(s.command) === normalized;
+    if (!commandMatch) continue;
+
     let specificity = 0;
     if (s.command !== '*') specificity += 2;
     if (cwdScope && cwdScope !== '*') specificity += 1;
@@ -196,23 +348,56 @@ export const resolveExecGrants = (
 // ── MCP server policy ─────────────────────────────────────────────────
 
 /**
- * Resolve MCP server-level grants. Returns undefined if no mcp policy
- * rows exist (caller should fall back to tool-level policy). Returns Grant[]
- * if a matching row is found. Returns empty [] (deny) if rows exist but none match.
+ * Resolve MCP server-level matches. Returns undefined if no mcp rows
+ * exist (caller should fall back to tool-level policy). Returns PolicyMatch[]
+ * with all matching rows for the server (across effects).
  */
+export const resolveMcpMatches = (
+  mcpRows: PolicyRow[],
+  serverId: string,
+): PolicyMatch[] | undefined => {
+  if (mcpRows.length === 0) return undefined;
+
+  const matches: PolicyMatch[] = [];
+  const seenEffects = new Set<PolicyEffect>();
+
+  // Exact match first (per effect)
+  for (const row of mcpRows) {
+    if (row.resourceKey === serverId) {
+      const effect = (row.effect ?? 'allow') as PolicyEffect;
+      if (!seenEffects.has(effect)) {
+        seenEffects.add(effect);
+        matches.push({ effect, grants: row.grants as Grant[] });
+      }
+    }
+  }
+  // Wildcard (only for effects not covered by exact)
+  for (const row of mcpRows) {
+    if (row.resourceKey === '*') {
+      const effect = (row.effect ?? 'allow') as PolicyEffect;
+      if (!seenEffects.has(effect)) {
+        seenEffects.add(effect);
+        matches.push({ effect, grants: row.grants as Grant[] });
+      }
+    }
+  }
+
+  if (matches.length === 0) return [];
+  return matches;
+};
+
+/** @deprecated Use resolveMcpMatches + evaluateAccess instead. */
 export const resolveMcpGrants = (
   mcpRows: PolicyRow[],
   serverId: string,
 ): Grant[] | undefined => {
   if (mcpRows.length === 0) return undefined;
 
-  // Exact match first
   for (const row of mcpRows) {
-    if (row.resourceKey === serverId) return row.grants as Grant[];
+    if (row.resourceKey === serverId && row.effect === 'allow') return row.grants as Grant[];
   }
-  // Wildcard
   for (const row of mcpRows) {
-    if (row.resourceKey === '*') return row.grants as Grant[];
+    if (row.resourceKey === '*' && row.effect === 'allow') return row.grants as Grant[];
   }
 
   return [];

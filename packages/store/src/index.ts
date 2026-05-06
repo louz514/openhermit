@@ -46,6 +46,7 @@ export type {
   SandboxCreateInput,
   SandboxStatus,
   SandboxType,
+  PolicyEffect,
   PolicyRecord,
 } from './types.js';
 

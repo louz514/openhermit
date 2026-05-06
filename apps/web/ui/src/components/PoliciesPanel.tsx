@@ -38,9 +38,9 @@ export function PoliciesPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const handleDelete = async (p: PolicyInfo) => {
-    if (!window.confirm(`Delete policy for ${p.resourceType}/${p.resourceKey}?`)) return;
+    if (!window.confirm(`Delete policy for ${p.resourceType}/${p.resourceKey} [${p.effect}]?`)) return;
     try {
-      await deletePolicy(p.resourceType, p.resourceKey);
+      await deletePolicy(p.resourceType, p.resourceKey, p.effect);
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -76,6 +76,7 @@ export function PoliciesPanel() {
               <div className="policies-row__info">
                 <span className="policies-row__key">{p.resourceKey}</span>
                 <span className="policies-row__type">{p.resourceType}</span>
+                <span className={`policies-row__effect policies-row__effect--${p.effect}`}>{p.effect}</span>
                 {p.scope && Object.keys(p.scope).length > 0 && (
                   <span className="policies-row__scope">{JSON.stringify(p.scope)}</span>
                 )}
@@ -106,6 +107,7 @@ export function PoliciesPanel() {
 function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [resourceKey, setResourceKey] = useState('');
+  const [effect, setEffect] = useState<'allow' | 'deny' | 'require_approval'>('allow');
   const [preset, setPreset] = useState(2); // default: Owner + User
   const [customGrants, setCustomGrants] = useState('');
   const [useCustom, setUseCustom] = useState(false);
@@ -135,7 +137,7 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
     setBusy(true);
     setErr('');
     try {
-      await upsertPolicy({ resourceType: 'tool', resourceKey: key, grants });
+      await upsertPolicy({ resourceType: 'tool', resourceKey: key, effect, grants });
       onClose();
       onCreated();
     } catch (error) {
@@ -160,8 +162,22 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
           />
         </label>
 
+        <label className="manage__field">
+          <span className="manage__field-label">Effect</span>
+          <select
+            className="manage__field-input"
+            value={effect}
+            onChange={(e) => setEffect(e.target.value as 'allow' | 'deny' | 'require_approval')}
+            disabled={busy}
+          >
+            <option value="allow">Allow</option>
+            <option value="deny">Deny</option>
+            <option value="require_approval">Require Approval</option>
+          </select>
+        </label>
+
         <fieldset className="manage__field" style={{ border: 'none', padding: 0, margin: 0 }}>
-          <span className="manage__field-label">Grants</span>
+          <span className="manage__field-label">Grants (who this rule targets)</span>
           <div className="manage__radio-group">
             {GRANT_PRESETS.map((p, i) => (
               <label key={i}>
