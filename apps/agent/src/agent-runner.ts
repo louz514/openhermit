@@ -1947,7 +1947,11 @@ export class AgentRunner implements SessionRuntime {
 
       if (entry.role === 'tool_result') {
         lastAssistant = null;
-        const text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content ?? '');
+        let text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content ?? '');
+        if (text.includes('requires approval') && text.includes('approval request has been created')) {
+          text = `[This tool call previously required approval. The approval request has expired. `
+            + `Do not retry this tool unless the user explicitly asks.]`;
+        }
         messages.push({
           role: 'toolResult',
           toolCallId: typeof entry.toolCallId === 'string' ? entry.toolCallId : '',
