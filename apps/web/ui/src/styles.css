@@ -697,6 +697,28 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   color: var(--text-secondary);
 }
 
+.chat__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Allow `.sidebar__footer` to lay out its info block + disconnect cleanly
+   without crowding any always-visible toggle (theme toggle moved to header). */
+.sidebar__footer-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sidebar__footer-info .sidebar__footer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Inline 1em-baseline svg icons used inside paragraph hints. */
+.inline-icon {
+  vertical-align: -0.15em;
+  margin-right: 4px;
+}
+
 /* ─── Chat messages ────────────────────────────────────────────── */
 
 .chat__messages {

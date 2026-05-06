@@ -9,6 +9,7 @@ import type { ManageTab } from './ManagePanel';
 import { ChatWelcome } from './ChatWelcome';
 import { OnboardingTour, isTourCompleted } from './OnboardingTour';
 import { ThemeToggle } from './ThemeToggle';
+import { Icon } from './Icon';
 import { CommandPalette, useCommandPalette, type CommandItem } from './CommandPalette';
 
 const createSessionId = () =>
@@ -45,9 +46,10 @@ interface Props {
   connection: Connection;
   role: string | null;
   onDisconnect: () => void;
+  onGoHome?: () => void;
 }
 
-export function ChatShell({ connection, role, onDisconnect }: Props) {
+export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
   const initialRoute = parseRoute(window.location.pathname);
   const [view, setView] = useState<View>(initialRoute.view);
   const [manageTab, setManageTab] = useState<ManageTab>(initialRoute.view === 'manage' ? initialRoute.tab : 'basic');
@@ -508,7 +510,7 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
         group: 'Chat',
         label: 'New session',
         hint: '⌘ N',
-        icon: '✦',
+        icon: <Icon name="sparkle" size={14} />,
         action: () => { setView('chat'); void createNewSession(); },
         keywords: ['create', 'thread'],
       },
@@ -519,20 +521,20 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
         group: 'Sessions',
         label: s.title || s.sessionId,
         hint: s.source?.platform ?? s.source?.kind ?? '',
-        icon: '◌',
+        icon: <Icon name="circle-dot" size={14} />,
         action: () => { void selectSession(s.sessionId); },
         keywords: [s.sessionId],
       });
     }
     if (isOwner) {
-      const tabs: { id: ManageTab; label: string; icon: string }[] = [
-        { id: 'basic', label: 'Basic', icon: '⚙' },
-        { id: 'secrets', label: 'Secrets', icon: '🔑' },
-        { id: 'channels', label: 'Channels', icon: '💬' },
-        { id: 'skills', label: 'Skills', icon: '🛠' },
-        { id: 'mcp', label: 'MCP', icon: '🧩' },
-        { id: 'schedules', label: 'Schedules', icon: '⏰' },
-        { id: 'policies', label: 'Policies', icon: '🛡' },
+      const tabs: { id: ManageTab; label: string; icon: 'settings' | 'key' | 'message-square' | 'wand' | 'puzzle' | 'clock' | 'shield' }[] = [
+        { id: 'basic', label: 'Basic', icon: 'settings' },
+        { id: 'secrets', label: 'Secrets', icon: 'key' },
+        { id: 'channels', label: 'Apps', icon: 'message-square' },
+        { id: 'skills', label: 'Abilities', icon: 'wand' },
+        { id: 'mcp', label: 'Integrations', icon: 'puzzle' },
+        { id: 'schedules', label: 'Tasks', icon: 'clock' },
+        { id: 'policies', label: 'Permissions', icon: 'shield' },
       ];
       for (const t of tabs) {
         out.push({
@@ -540,7 +542,7 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
           group: 'Manage',
           label: `Open ${t.label}`,
           hint: 'Manage panel',
-          icon: t.icon,
+          icon: <Icon name={t.icon} size={14} />,
           action: () => { setView('manage'); setManageTab(t.id); },
           keywords: ['settings', 'config'],
         });
@@ -551,7 +553,7 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
         id: 'disconnect',
         group: 'Account',
         label: 'Disconnect from this agent',
-        icon: '⏻',
+        icon: <Icon name="power" size={14} />,
         action: onDisconnect,
         keywords: ['logout', 'sign out', 'leave'],
       },
@@ -569,6 +571,10 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
             aria-label="OpenHermit home"
             onClick={(e) => {
               e.preventDefault();
+              if (onGoHome) {
+                onGoHome();
+                return;
+              }
               setView('chat');
               setCurrentSessionId(null);
               if (window.location.pathname !== '/') {
@@ -630,7 +636,7 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
           onDelete={sessionId => void deleteSession(sessionId)}
         />
         <div className="sidebar__footer">
-          <div>
+          <div className="sidebar__footer-info">
             <div className="sidebar__footer-name">
               <span className={`live-pulse${status === 'Connected' ? '' : ' live-pulse--idle'}`} />
               {getDisplayName() || 'Anonymous'}
@@ -639,7 +645,6 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
             <div className="sidebar__footer-auth">Auth: device key · WS</div>
           </div>
           <button className="btn btn--ghost btn--sm" onClick={onDisconnect}>Disconnect</button>
-          <ThemeToggle />
         </div>
       </aside>
 
@@ -657,6 +662,9 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
               <div>
                 <p className="eyebrow">Agent Management</p>
                 <h2>{connection.agentId}</h2>
+              </div>
+              <div className="chat__header-actions">
+                <ThemeToggle />
               </div>
             </header>
             <div className="chat__manage-area">
@@ -679,7 +687,10 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
                 <p className="eyebrow">Current Session</p>
                 <h2>{sessionTitle}</h2>
               </div>
-              <p className="chat__status">{status}</p>
+              <div className="chat__header-actions">
+                <p className="chat__status">{status}</p>
+                <ThemeToggle />
+              </div>
             </header>
 
             <ChatMessages

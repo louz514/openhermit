@@ -154,6 +154,7 @@ export function App() {
           connection={connection!}
           role={connection?.role ?? null}
           onDisconnect={handleDisconnect}
+          onGoHome={() => setScreen('landing')}
         />
       </Suspense>
     </ToastProvider>
