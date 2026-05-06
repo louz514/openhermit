@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { marked, type TokenizerExtension, type RendererExtension } from 'marked';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -66,6 +66,19 @@ const renderMarkdown = (text: string, streaming = false): string => {
   const raw = marked.parse(src, { async: false }) as string;
   return DOMPurify.sanitize(raw, SANITIZE_CONFIG);
 };
+
+// Memoized markdown wrapper. Marked + KaTeX + DOMPurify is non-trivial work
+// per render; this skips re-parsing whenever the parent re-renders without a
+// real text/streaming change (the common case during streaming sibling
+// messages).
+const MarkdownBlock = memo(function MarkdownBlock({
+  text,
+  streaming,
+  className,
+}: { text: string; streaming: boolean; className: string }) {
+  const html = useMemo(() => renderMarkdown(text, streaming), [text, streaming]);
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+});
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -224,7 +237,7 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
     );
   }
 
-  const turns = groupIntoTurns(items);
+  const turns = useMemo(() => groupIntoTurns(items), [items]);
 
   return (
     <section className="chat__messages" ref={containerRef}>
@@ -271,7 +284,12 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
               switch (item.type) {
                 case 'assistant':
                   return (
-                    <div key={ii} className="message__body" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text, item.streaming) }} />
+                    <MarkdownBlock
+                      key={ii}
+                      text={item.text}
+                      streaming={item.streaming}
+                      className="message__body"
+                    />
                   );
                 case 'tool':
                   return <ToolCard key={ii} item={item} />;
@@ -283,7 +301,11 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
                       <summary className="thinking-block__header">
                         {item.streaming ? <>Thinking<span className="thinking-dots" /></> : 'Thinking'}
                       </summary>
-                      <div className="thinking-block__body" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text, item.streaming) }} />
+                      <MarkdownBlock
+                        text={item.text}
+                        streaming={item.streaming ?? false}
+                        className="thinking-block__body"
+                      />
                     </details>
                   ) : (
                     <div key={ii} className="message__body thinking-indicator">Thinking<span className="thinking-dots" /></div>
