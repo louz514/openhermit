@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.0 — 2026-05-06
+
+### Policy v2: unified effect model + approval flow
+
+The access policy system now supports three effects per policy row: `allow`, `deny`, and `require_approval`. This replaces the previous `autonomy_level` / `require_approval_for` fields in SecurityPolicy with a single, composable mechanism.
+
+**Effect evaluation** follows deny > require_approval > allow precedence (AWS IAM style). When policy rows exist for a resource but none match the calling principal's grants, access is denied — no silent fallthrough.
+
+**Approval flow** supports two modes:
+
+- **Real-time approval**: when the owner is in an interactive session, a UI prompt appears inline (ApprovalGate). The owner approves or rejects without leaving the conversation.
+- **Async approval**: when the requester is on a different channel (e.g. Telegram guest), an `ApprovalRequest` is persisted and the owner is notified on their configured channel with approve/reject buttons. The agent tells the user to wait for owner approval and stops attempting workarounds.
+
+Approved requests are cached with a configurable TTL (default 60 minutes). Owners can choose `persistent` resolution to auto-create a permanent allow policy row for the requester.
+
+**ToolPolicy simplified**: the previous `{ kind: 'fixed', grants } | { kind: 'configurable', defaultGrants }` union is replaced by a single `{ defaultGrants: Grant[] }` interface. All tools are now overridable via DB policy rows — there is no longer a "fixed" category that ignores the policy table.
+
+**Default grants tightened**:
+
+| Tool | Old default | New default |
+|------|------------|-------------|
+| `exec` | owner + user | owner only |
+| `file_write`, `file_edit`, `file_delete` | owner + user | owner only |
+| `schedule_create/update/delete/trigger` | owner + user | owner only |
+| `file_read`, `file_list`, `file_stat` | owner + user | owner + user (unchanged) |
+
+**File and exec policy scopes** are now populated at creation time with structured fields (`{ sandbox, mode, path }` for files, `{ sandbox, command, cwd }` for exec) instead of relying on fallback matching at evaluation time.
+
+**Channel identity forwarding**: channel-authenticated API calls (e.g. Telegram bridge reviewing an approval) can now pass `x-channel-user-id` header so the gateway resolves the acting user's identity for authorization.
+
+### Breaking changes
+
+- `ToolPolicy` type changed from a discriminated union to `{ defaultGrants: Grant[] }`. All tool definitions updated.
+- `evaluateAccess` returns `'deny'` (not the default decision) when policy rows exist but no grant matches the principal. Previously this allowed guests to bypass owner-only tools.
+- `autonomy_level` and `require_approval_for` in SecurityPolicy are deprecated. They still work as syntactic sugar (synthesized into virtual policy rows at runtime) but new deployments should use policy rows directly.
+
+---
+
 ## 0.5.2 — 2026-05-05
 
 ### Fixes

@@ -70,31 +70,29 @@ mcp__{serverId}__{toolName}
 | session_send | matching channel outbound adapter |
 | MCP management | `McpClientManager` and MCP store |
 
-## Role Filtering
+## Access Policy
 
-| Role | Tool access |
+Tool access is controlled by the unified policy model (see [access-policy.md](./access-policy.md)). Each tool declares a `ToolPolicy` with `defaultGrants`. DB policy rows override defaults per-agent.
+
+Tools whose `evaluateAccess` returns `deny` for the calling principal are excluded from the tool list — the agent never sees them.
+
+### Default access by role
+
+| Role | Typical tool access |
 |------|-------------|
-| `owner` | all available built-ins, user management, MCP management, schedules |
-| `user` | exec, file (read/write/edit/list/stat/delete), memory, web, sessions, identity link |
-| `guest` | file_read, file_list, file_stat, web, sessions (own only), identity link |
+| `owner` | all tools |
+| `user` | file read/list/stat, memory, web, sessions, identity link |
+| `guest` | web, identity link (all else denied by default) |
 
-The exact set is assembled in `AgentRunner.createAgent()` from the resolved role and available stores.
+Owners can widen or narrow any tool's access via policy rows or the Policies admin tab.
 
 ## Approval
 
-The security policy (`agents.security_json`, edited via admin UI / `hermit security ...`) controls approval behavior:
+When a policy row has `effect: 'require_approval'`, the system supports two modes:
 
-```json
-{
-  "autonomy_level": "supervised",
-  "require_approval_for": ["exec"]
-}
-```
+- **Real-time**: owner is in an interactive session → inline approve/reject UI prompt (ApprovalGate).
+- **Async**: owner is on a different channel → `ApprovalRequest` persisted, owner notified via configured channel (e.g. Telegram) with approve/reject buttons. The agent stops and tells the user to wait.
 
-Autonomy levels:
+Approved requests are cached with a TTL (default 60 minutes). Owners can grant `persistent` approval to auto-create a permanent allow policy row.
 
-- `readonly`
-- `supervised`
-- `full`
-
-When approval is required, the runtime emits `tool_approval_required` and pauses until `/approve` or WebSocket `session.approve` resolves the tool call. Interactive sessions provide an approval callback; channel adapters currently auto-approve channel approvals.
+See [access-policy.md](./access-policy.md) for full details on the approval flow and policy configuration.
