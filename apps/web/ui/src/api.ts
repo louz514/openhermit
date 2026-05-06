@@ -542,7 +542,13 @@ export const getUserId = (): string | null => userId;
 
 // ─── REST API helpers for management ──────────────────────────────────────
 
-async function rawFetch<T>(url: string, options?: { method?: string; body?: unknown }): Promise<T> {
+interface FetchOptions {
+  method?: string;
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
+async function rawFetch<T>(url: string, options?: FetchOptions): Promise<T> {
   const token = await getJwt();
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
   let bodyStr: string | undefined;
@@ -553,6 +559,7 @@ async function rawFetch<T>(url: string, options?: { method?: string; body?: unkn
   const res = await fetch(url, {
     method: options?.method ?? 'GET',
     headers,
+    signal: options?.signal,
     ...(bodyStr ? { body: bodyStr } : {}),
   });
   if (!res.ok) {
@@ -562,13 +569,78 @@ async function rawFetch<T>(url: string, options?: { method?: string; body?: unkn
   return res.json() as Promise<T>;
 }
 
-export async function apiFetch<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
-  return rawFetch<T>(`${gatewayBase}/api/agents/${encodeURIComponent(currentAgentId)}${path}`, options);
+// Tiny TTL cache for GETs. Keyed by full URL. Useful for tab switching
+// in ManagePanel where the same list endpoints get hit repeatedly within
+// a few seconds. Mutations invalidate via `invalidateApiCache(prefix)`.
+interface CacheEntry { value: unknown; expires: number }
+const apiCache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<unknown>>();
+const CACHE_TTL_MS = 5_000;
+
+function cacheGet<T>(key: string): T | undefined {
+  const entry = apiCache.get(key);
+  if (!entry) return undefined;
+  if (entry.expires < Date.now()) {
+    apiCache.delete(key);
+    return undefined;
+  }
+  return entry.value as T;
+}
+
+function cacheSet(key: string, value: unknown): void {
+  apiCache.set(key, { value, expires: Date.now() + CACHE_TTL_MS });
+}
+
+/** Drop cached GETs whose URL contains the given substring. Call after a
+ *  mutation so the next read hits the network. */
+export function invalidateApiCache(substring?: string): void {
+  if (!substring) {
+    apiCache.clear();
+    return;
+  }
+  for (const key of apiCache.keys()) {
+    if (key.includes(substring)) apiCache.delete(key);
+  }
+}
+
+async function cachedGet<T>(url: string, options?: FetchOptions): Promise<T> {
+  // Don't cache when caller passed a signal — they want a fresh fetch they
+  // can cancel.
+  if (options?.signal) return rawFetch<T>(url, options);
+  const cached = cacheGet<T>(url);
+  if (cached !== undefined) return cached;
+  const pending = inflight.get(url);
+  if (pending) return pending as Promise<T>;
+  const p = rawFetch<T>(url, options).then((value) => {
+    cacheSet(url, value);
+    inflight.delete(url);
+    return value;
+  }).catch((err) => {
+    inflight.delete(url);
+    throw err;
+  });
+  inflight.set(url, p);
+  return p;
+}
+
+export async function apiFetch<T>(path: string, options?: FetchOptions): Promise<T> {
+  const url = `${gatewayBase}/api/agents/${encodeURIComponent(currentAgentId)}${path}`;
+  const method = options?.method ?? 'GET';
+  if (method === 'GET') return cachedGet<T>(url, options);
+  // Mutation: invalidate the agent's cached entries so next reads are fresh.
+  const result = await rawFetch<T>(url, options);
+  invalidateApiCache(`/api/agents/${encodeURIComponent(currentAgentId)}`);
+  return result;
 }
 
 /** Call a non-agent-scoped gateway endpoint (e.g. /api/providers). */
-export async function apiFetchGlobal<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
-  return rawFetch<T>(`${gatewayBase}${path}`, options);
+export async function apiFetchGlobal<T>(path: string, options?: FetchOptions): Promise<T> {
+  const url = `${gatewayBase}${path}`;
+  const method = options?.method ?? 'GET';
+  if (method === 'GET') return cachedGet<T>(url, options);
+  const result = await rawFetch<T>(url, options);
+  invalidateApiCache(path);
+  return result;
 }
 
 // Agent info
