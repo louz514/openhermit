@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, type ReactNode } from 'react';
 
 export interface CommandItem {
   id: string;
@@ -6,7 +6,7 @@ export interface CommandItem {
   hint?: string;
   group: string;
   action: () => void | Promise<void>;
-  icon?: string;
+  icon?: ReactNode;
   keywords?: string[];
 }
 
