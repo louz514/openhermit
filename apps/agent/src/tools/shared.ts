@@ -128,7 +128,12 @@ export const checkApprovalOrRequest = async (
     resourceType,
     resourceKey,
   );
-  if (approved) return;
+  if (approved) {
+    console.log(`[approval] ${resourceType}/${resourceKey} already approved for ${context.currentUserId}`);
+    return;
+  }
+
+  console.log(`[approval] ${resourceType}/${resourceKey} needs approval. approvalCallback=${!!context.approvalCallback} sessionId=${context.sessionId}`);
 
   // Real-time approval: owner is in an interactive session
   if (context.approvalCallback) {
