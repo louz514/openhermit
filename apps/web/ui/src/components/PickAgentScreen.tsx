@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  exportDeviceKey,
+  getDeviceFingerprint,
   getDisplayName,
+  getJwt,
   getUserId,
   joinAgent,
   listMyAgents,
@@ -28,6 +31,12 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
   const [joinToken, setJoinToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
+  const [accessToken, setAccessToken] = useState('');
+  const [deviceKeyJson, setDeviceKeyJson] = useState('');
+  const [fingerprint, setFingerprint] = useState('');
+  const [showDeviceKey, setShowDeviceKey] = useState(false);
+  const [copyMsg, setCopyMsg] = useState('');
 
   const refresh = async (): Promise<void> => {
     try {
@@ -38,6 +47,30 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
   };
 
   useEffect(() => { void refresh(); }, []);
+
+  const openTokens = async (): Promise<void> => {
+    setTokensOpen((v) => !v);
+    if (!accessToken) {
+      try {
+        const [jwt, fp] = await Promise.all([getJwt(), getDeviceFingerprint()]);
+        setAccessToken(jwt);
+        setFingerprint(fp);
+        setDeviceKeyJson(exportDeviceKey() ?? '');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  };
+
+  const copy = async (value: string, label: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyMsg(`${label} copied`);
+      setTimeout(() => setCopyMsg(''), 1800);
+    } catch {
+      setCopyMsg('Copy failed — select and copy manually');
+    }
+  };
 
   const enter = async (m: AgentMembership): Promise<void> => {
     setError('');
@@ -154,7 +187,7 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                 />
               </label>
               <label className="field">
-                <span className="field__label">Access Token</span>
+                <span className="field__label">Agent invite token</span>
                 <input
                   className="field__input"
                   type="password"
@@ -162,6 +195,11 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                   value={joinToken}
                   onChange={(e) => setJoinToken(e.target.value)}
                 />
+                <span className="field__help">
+                  Per-agent shared secret from the agent's owner (set with
+                  <code> hermit agents create --access-token …</code>). This is
+                  <strong> not</strong> your bearer token.
+                </span>
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -187,6 +225,112 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
               </div>
             </form>
           </>
+        )}
+
+        <button
+          className="btn btn--ghost btn--sm"
+          type="button"
+          onClick={() => void openTokens()}
+          style={{ marginTop: 16 }}
+        >
+          {tokensOpen ? 'Hide access tokens' : 'Show access tokens'}
+        </button>
+        {tokensOpen && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: 12,
+              border: '1px solid var(--border, #e4e4e7)',
+              borderRadius: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              fontSize: 13,
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <strong>API bearer token (your JWT)</strong>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => void copy(accessToken, 'Bearer token')}
+                  disabled={!accessToken}
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="hint" style={{ margin: '0 0 6px' }}>
+                Short-lived (~24h). Use as <code>Authorization: Bearer &lt;token&gt;</code> for the
+                CLI, curl, or any HTTP integration. Auto-refreshes from your device key when it
+                expires. <strong>Don't paste this into the "Agent invite token" field</strong> when joining an agent — that field is a separate per-agent secret.
+              </p>
+              <code
+                style={{
+                  display: 'block',
+                  fontSize: 11,
+                  padding: '8px 10px',
+                  background: 'var(--surface, #f4f4f5)',
+                  borderRadius: 6,
+                  wordBreak: 'break-all',
+                  maxHeight: 80,
+                  overflow: 'auto',
+                }}
+              >
+                {accessToken || 'Loading…'}
+              </code>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <strong>Device key</strong>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setShowDeviceKey((v) => !v)}
+                    disabled={!deviceKeyJson}
+                  >
+                    {showDeviceKey ? 'Hide' : 'Reveal'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => void copy(deviceKeyJson, 'Device key')}
+                    disabled={!deviceKeyJson}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <p className="hint" style={{ margin: '0 0 6px' }}>
+                Fingerprint: <code style={{ fontSize: 11 }}>{fingerprint ? `${fingerprint.slice(0, 8)}…${fingerprint.slice(-8)}` : '—'}</code>
+                <br />
+                <span style={{ color: 'var(--danger, #b91c1c)' }}>
+                  ⚠ This is your private key. Anyone with it can sign in as you. Save it to a
+                  password manager to add another device — never paste it into chat or email.
+                </span>
+              </p>
+              {showDeviceKey && (
+                <code
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    padding: '8px 10px',
+                    background: 'var(--surface, #f4f4f5)',
+                    borderRadius: 6,
+                    whiteSpace: 'pre',
+                    maxHeight: 160,
+                    overflow: 'auto',
+                  }}
+                >
+                  {deviceKeyJson || 'Loading…'}
+                </code>
+              )}
+            </div>
+
+            {copyMsg && <p className="hint" style={{ margin: 0, color: 'var(--success, #166534)' }}>{copyMsg}</p>}
+          </div>
         )}
 
         <button
