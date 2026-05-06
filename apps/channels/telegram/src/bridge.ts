@@ -41,6 +41,8 @@ export class TelegramBridge implements ChannelOutbound {
   /** Maps short callback IDs to (requestId, decision) for async approval buttons. */
   private readonly pendingAsyncApprovals = new Map<string, { requestId: string; decision: 'approved' | 'rejected' }>();
   private approvalSeq = 0;
+  /** Per-chat message queue to serialize message handling (avoids duplicate SSE watchers). */
+  private readonly chatLocks = new Map<number, Promise<void>>();
 
   constructor(
     private readonly telegram: TelegramApi,
@@ -182,18 +184,28 @@ export class TelegramBridge implements ChannelOutbound {
     return sessionId;
   }
 
-  /** Handle an incoming Telegram message. */
+  /** Handle an incoming Telegram message (serialized per chat). */
   async handleMessage(message: TelegramMessage): Promise<void> {
+    const chatId = message.chat.id;
+    const prev = this.chatLocks.get(chatId) ?? Promise.resolve();
+    const current = prev.then(
+      () => this.handleMessageInner(message),
+      () => this.handleMessageInner(message),
+    );
+    this.chatLocks.set(chatId, current.catch(() => {}));
+    await current;
+  }
+
+  private async handleMessageInner(message: TelegramMessage): Promise<void> {
     const chatId = message.chat.id;
     const text = message.text?.trim();
 
     if (!text) {
-      return; // Ignore non-text messages for now.
+      return;
     }
 
     const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup';
 
-    // Handle commands.
     if (text === '/start') {
       await this.handleStart(chatId, message, isGroup);
       return;
@@ -204,7 +216,6 @@ export class TelegramBridge implements ChannelOutbound {
       return;
     }
 
-    // Regular message — send to agent.
     const sessionId = await this.getSessionId(chatId);
     await this.sendToAgent(chatId, sessionId, text, message, isGroup);
   }
