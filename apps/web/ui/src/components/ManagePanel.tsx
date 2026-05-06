@@ -1,11 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { BasicPanel } from './BasicPanel';
-import { SecretsPanel } from './SecretsPanel';
-import { SkillsPanel } from './SkillsPanel';
-import { McpPanel } from './McpPanel';
-import { SchedulesPanel } from './SchedulesPanel';
-import { ChannelsPanel } from './ChannelsPanel';
-import { PoliciesPanel } from './PoliciesPanel';
-import { ApprovalsPanel } from './ApprovalsPanel';
+
+// Each sub-panel pulls its own data + components on first open. BasicPanel
+// stays eager because it's the default tab.
+const SecretsPanel = lazy(() => import('./SecretsPanel').then((m) => ({ default: m.SecretsPanel })));
+const SkillsPanel = lazy(() => import('./SkillsPanel').then((m) => ({ default: m.SkillsPanel })));
+const McpPanel = lazy(() => import('./McpPanel').then((m) => ({ default: m.McpPanel })));
+const SchedulesPanel = lazy(() => import('./SchedulesPanel').then((m) => ({ default: m.SchedulesPanel })));
+const ChannelsPanel = lazy(() => import('./ChannelsPanel').then((m) => ({ default: m.ChannelsPanel })));
+const PoliciesPanel = lazy(() => import('./PoliciesPanel').then((m) => ({ default: m.PoliciesPanel })));
+const ApprovalsPanel = lazy(() => import('./ApprovalsPanel').then((m) => ({ default: m.ApprovalsPanel })));
 
 export type ManageTab = 'basic' | 'secrets' | 'skills' | 'mcp' | 'schedules' | 'channels' | 'policies' | 'approvals';
 
@@ -54,13 +58,17 @@ export function ManagePanel({ tab, onTabChange }: Props) {
       )}
       <div className="manage__content">
         {tab === 'basic' && <BasicPanel />}
-        {tab === 'secrets' && <SecretsPanel />}
-        {tab === 'skills' && <SkillsPanel />}
-        {tab === 'mcp' && <McpPanel />}
-        {tab === 'schedules' && <SchedulesPanel />}
-        {tab === 'channels' && <ChannelsPanel />}
-        {tab === 'policies' && <PoliciesPanel />}
-        {tab === 'approvals' && <ApprovalsPanel />}
+        {tab !== 'basic' && (
+          <Suspense fallback={<div className="manage__loading">Loading…</div>}>
+            {tab === 'secrets' && <SecretsPanel />}
+            {tab === 'skills' && <SkillsPanel />}
+            {tab === 'mcp' && <McpPanel />}
+            {tab === 'schedules' && <SchedulesPanel />}
+            {tab === 'channels' && <ChannelsPanel />}
+            {tab === 'policies' && <PoliciesPanel />}
+            {tab === 'approvals' && <ApprovalsPanel />}
+          </Suspense>
+        )}
       </div>
     </div>
   );

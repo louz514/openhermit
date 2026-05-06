@@ -388,15 +388,15 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 
 .welcome-bg {
   background:
-    radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.10), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(168, 85, 247, 0.08), transparent 50%),
+    radial-gradient(circle at 15% 20%, var(--accent-soft), transparent 45%),
+    radial-gradient(circle at 85% 80%, var(--accent-glow), transparent 50%),
     var(--bg);
 }
 
 .welcome-card {
   max-width: 440px;
   padding: 32px 28px 24px;
-  box-shadow: 0 8px 32px -12px rgba(99, 102, 241, 0.18), 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 32px -12px var(--accent-glow), 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .welcome-hero {
@@ -421,9 +421,9 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   align-items: center;
   justify-content: center;
   font-size: 28px;
-  background: linear-gradient(135deg, var(--accent), #a855f7);
-  color: white;
-  box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.45);
+  background: var(--gradient-accent, linear-gradient(135deg, var(--accent), var(--accent-strong)));
+  color: #ffffff;
+  box-shadow: 0 4px 14px -2px var(--accent-glow);
 }
 
 .hint--center { text-align: center; max-width: 320px; margin: 0 auto 4px; }
@@ -584,7 +584,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 
 .session-card.is-active {
   background: var(--accent-soft);
-  border-color: rgba(99, 102, 241, 0.12);
+  border-color: var(--accent-soft);
 }
 
 .session-card.is-inactive { opacity: 0.4; }
@@ -722,7 +722,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .message--user {
   margin-left: auto;
   background: var(--accent-soft);
-  border-color: rgba(99, 102, 241, 0.1);
+  border-color: var(--accent-soft);
 }
 
 .message--assistant { margin-right: auto; }
@@ -1077,6 +1077,12 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .manage__tab.active { background: var(--accent); color: #fff; }
 
 .manage__content { min-height: 0; }
+.manage__loading {
+  padding: 24px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
 
 .manage__toolbar {
   display: flex;
@@ -1630,7 +1636,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   font-size: 32px;
   background: linear-gradient(135deg, var(--accent), #a855f7);
   color: white;
-  box-shadow: 0 6px 18px -4px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 6px 18px -4px var(--accent-glow);
 }
 
 .chat-welcome__heading {
@@ -1666,7 +1672,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .example-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px -8px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 6px 16px -8px var(--accent-glow);
 }
 .example-card__emoji {
   font-size: 20px;
@@ -1729,7 +1735,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   position: fixed;
   border: 2px solid var(--accent);
   border-radius: 10px;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25), 0 12px 32px -10px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 4px var(--accent-glow), 0 12px 32px -10px var(--accent-glow);
   pointer-events: none;
   transition: top 200ms ease, left 200ms ease, width 200ms ease, height 200ms ease;
 }
@@ -2121,7 +2127,35 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
-  margin-bottom: 48px;
+  margin-bottom: 32px;
+}
+.landing__stats {
+  display: flex;
+  gap: 36px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 auto 48px;
+  padding-top: 8px;
+}
+.landing__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.landing__stat-value {
+  font-family: var(--serif, inherit);
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.landing__stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .btn--lg { padding: 12px 24px; font-size: 15px; }
 .btn--sm { padding: 6px 14px; font-size: 13px; }
