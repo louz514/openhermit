@@ -3,6 +3,7 @@ import {
   exchangeToken,
   getDeviceFingerprint,
   getDisplayName,
+  importDeviceKey,
   isNewDevice,
   loadGatewayUrl,
   saveGatewayUrl,
@@ -53,6 +54,8 @@ export function SetupScreen({ onComplete }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [mode, setMode] = useState<'new' | 'restore'>('new');
+  const [restoreKey, setRestoreKey] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -70,15 +73,28 @@ export function SetupScreen({ onComplete }: Props) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const url = gatewayUrl.trim().replace(/\/+$/, '');
-    const dn = name.trim();
-    if (!url || !dn) return;
+    if (!url) return;
     setError('');
     setSubmitting(true);
     try {
-      setDisplayName(dn);
       saveGatewayUrl(url);
       setGateway(url);
-      await exchangeToken(dn);
+      if (mode === 'restore') {
+        const ok = importDeviceKey(restoreKey.trim());
+        if (!ok) throw new Error('That doesn\'t look like a valid device key. Paste the full JSON you exported.');
+        // Use the imported display name if present, otherwise fall back to
+        // whatever the user typed (or the existing one).
+        const importedName = getDisplayName();
+        const dn = importedName || name.trim();
+        if (!dn) throw new Error('Display name is required.');
+        if (!importedName) setDisplayName(dn);
+        await exchangeToken(dn);
+      } else {
+        const dn = name.trim();
+        if (!dn) throw new Error('Display name is required.');
+        setDisplayName(dn);
+        await exchangeToken(dn);
+      }
       onComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -97,24 +113,68 @@ export function SetupScreen({ onComplete }: Props) {
           <p className="eyebrow">OpenHermit</p>
           <h1>{isNew ? 'Welcome aboard' : 'Sign back in'}</h1>
           <p className="hint hint--center">
-            {isNew
+            {mode === 'restore'
+              ? 'Paste a device key you previously exported to restore access on this browser.'
+              : isNew
               ? 'OpenHermit is your control plane for AI agents. Tell us your gateway and what to call you — we\'ll do the rest.'
               : 'Reconnecting this device to your gateway.'}
           </p>
         </div>
 
-        <label className="field">
-          <span className="field__label">Display name</span>
-          <input
-            className="field__input"
-            type="text"
-            placeholder="What should agents call you?"
-            required
-            autoFocus={isNew}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
+        <div className="welcome-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'new'}
+            className={`welcome-tab${mode === 'new' ? ' welcome-tab--active' : ''}`}
+            onClick={() => { setMode('new'); setError(''); }}
+          >
+            New device
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'restore'}
+            className={`welcome-tab${mode === 'restore' ? ' welcome-tab--active' : ''}`}
+            onClick={() => { setMode('restore'); setError(''); }}
+          >
+            Restore from key
+          </button>
+        </div>
+
+        {mode === 'new' && (
+          <label className="field">
+            <span className="field__label">Display name</span>
+            <input
+              className="field__input"
+              type="text"
+              placeholder="What should agents call you?"
+              required
+              autoFocus={isNew}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        )}
+
+        {mode === 'restore' && (
+          <label className="field">
+            <span className="field__label">Device key (JSON)</span>
+            <textarea
+              className="field__input"
+              rows={6}
+              placeholder='{"publicKey":{…},"privateKey":{…},"displayName":"…"}'
+              required
+              value={restoreKey}
+              onChange={(e) => setRestoreKey(e.target.value)}
+              style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, resize: 'vertical' }}
+            />
+            <span className="field__help">
+              Paste the full JSON you copied from <strong>Show access tokens → Device key</strong> on
+              another browser. Display name will be restored from the file.
+            </span>
+          </label>
+        )}
 
         <label className="field">
           <span className="field__label">Gateway URL</span>
@@ -136,9 +196,20 @@ export function SetupScreen({ onComplete }: Props) {
         <button
           className="btn btn--primary btn--full"
           type="submit"
-          disabled={!name.trim() || !gatewayUrl.trim() || submitting}
+          disabled={
+            !gatewayUrl.trim() ||
+            submitting ||
+            (mode === 'new' && !name.trim()) ||
+            (mode === 'restore' && !restoreKey.trim())
+          }
         >
-          {submitting ? 'Connecting…' : isNew ? 'Get started' : 'Continue'}
+          {submitting
+            ? 'Connecting…'
+            : mode === 'restore'
+            ? 'Restore device'
+            : isNew
+            ? 'Get started'
+            : 'Continue'}
         </button>
 
         <button

@@ -2290,3 +2290,32 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   .landing__compare-area { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; }
   .landing__footer { flex-direction: column; gap: 12px; padding: 24px; }
 }
+
+/* ─── Setup screen tabs ────────────────────────────────────────────────── */
+.welcome-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel-muted, color-mix(in srgb, var(--panel) 80%, transparent));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0 0 18px;
+}
+.welcome-tab {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.welcome-tab:hover { color: var(--text); }
+.welcome-tab--active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
