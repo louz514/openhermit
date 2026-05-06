@@ -5,6 +5,14 @@ interface Props {
   resumeTarget?: 'setup' | 'pick-agent' | 'chat';
 }
 
+const REPO_URL = 'https://github.com/louz514/openhermit';
+
+const HERO_STATS = [
+  { value: '1', label: 'gateway, all agents' },
+  { value: '6', label: 'channels out of the box' },
+  { value: 'MIT', label: 'open source' },
+];
+
 const FEATURES = [
   {
     icon: '🚪',
@@ -69,7 +77,7 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
           <a href="#why">Why</a>
           <a href="#quickstart">Quick start</a>
           <a
-            href="https://github.com/louz514/openhermit"
+            href={REPO_URL}
             target="_blank"
             rel="noreferrer noopener"
           >
@@ -98,12 +106,20 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
           </button>
           <a
             className="btn btn--ghost btn--lg"
-            href="https://github.com/louz514/openhermit"
+            href={REPO_URL}
             target="_blank"
             rel="noreferrer noopener"
           >
             Star on GitHub
           </a>
+        </div>
+        <div className="landing__stats">
+          {HERO_STATS.map((s) => (
+            <div className="landing__stat" key={s.label}>
+              <span className="landing__stat-value">{s.value}</span>
+              <span className="landing__stat-label">{s.label}</span>
+            </div>
+          ))}
         </div>
         <pre className="landing__code">
           <code>
@@ -201,7 +217,7 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
           </button>
           <a
             className="btn btn--ghost btn--lg"
-            href="https://github.com/louz514/openhermit"
+            href={REPO_URL}
             target="_blank"
             rel="noreferrer noopener"
           >
@@ -213,10 +229,10 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
       <footer className="landing__footer">
         <span>OpenHermit · MIT licensed</span>
         <span className="landing__footer-links">
-          <a href="https://github.com/louz514/openhermit" target="_blank" rel="noreferrer noopener">
+          <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
             GitHub
           </a>
-          <a href="https://github.com/louz514/openhermit/tree/main/docs" target="_blank" rel="noreferrer noopener">
+          <a href={`${REPO_URL}/tree/main/docs`} target="_blank" rel="noreferrer noopener">
             Docs
           </a>
           <a href="https://www.npmjs.com/package/openhermit" target="_blank" rel="noreferrer noopener">
