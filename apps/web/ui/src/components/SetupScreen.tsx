@@ -22,14 +22,37 @@ interface Props {
  * gateway-level JWT. The JWT has no agent in it; agent selection is
  * step 2 (PickAgentScreen).
  */
+/**
+ * Heuristic: if the user is loading the web UI from a non-gateway port
+ * (the typical dev setup is web=:4310, gateway=:4000), suggest the
+ * gateway origin instead of the web origin so first-time users don't
+ * accidentally connect to themselves.
+ */
+const suggestGatewayUrl = (): string => {
+  if (typeof window === 'undefined') return 'http://localhost:4000';
+  const origin = window.location.origin;
+  try {
+    const url = new URL(origin);
+    // Common dev port for the end-user web UI; gateway lives on :4000.
+    if (url.port === '4310' || url.port === '5173') {
+      url.port = '4000';
+      return url.toString().replace(/\/+$/, '');
+    }
+  } catch {
+    /* fall through */
+  }
+  return origin;
+};
+
 export function SetupScreen({ onComplete }: Props) {
   const [fingerprint, setFingerprint] = useState('');
-  const [gatewayUrl, setGatewayUrl] = useState(loadGatewayUrl() ?? window.location.origin);
+  const [gatewayUrl, setGatewayUrl] = useState(loadGatewayUrl() ?? suggestGatewayUrl());
   const [name, setName] = useState(getDisplayName() ?? '');
   const [isNew, setIsNew] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -67,44 +90,45 @@ export function SetupScreen({ onComplete }: Props) {
   if (loading) return null;
 
   return (
-    <div className="center-screen">
-      <form className="card card--form" onSubmit={handleSubmit}>
-        <p className="eyebrow">OpenHermit</p>
-        <h1>{isNew ? 'Welcome' : 'Connect to Gateway'}</h1>
-        <p className="hint">
-          {isNew
-            ? 'A new device key has been generated for this browser. Tell us where the gateway is and what to call you.'
-            : 'Sign in to your gateway with this device key.'}
-        </p>
-
-        <div className="device-key-display">
-          <span className="field__label">Device Key Fingerprint</span>
-          <code className="device-key-value">{shortFp}</code>
+    <div className="center-screen welcome-bg">
+      <form className="card card--form welcome-card" onSubmit={handleSubmit}>
+        <div className="welcome-hero">
+          <div className="welcome-logo">🜲</div>
+          <p className="eyebrow">OpenHermit</p>
+          <h1>{isNew ? 'Welcome aboard' : 'Sign back in'}</h1>
+          <p className="hint hint--center">
+            {isNew
+              ? 'OpenHermit is your control plane for AI agents. Tell us your gateway and what to call you — we\'ll do the rest.'
+              : 'Reconnecting this device to your gateway.'}
+          </p>
         </div>
+
+        <label className="field">
+          <span className="field__label">Display name</span>
+          <input
+            className="field__input"
+            type="text"
+            placeholder="What should agents call you?"
+            required
+            autoFocus={isNew}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
 
         <label className="field">
           <span className="field__label">Gateway URL</span>
           <input
             className="field__input"
             type="url"
-            placeholder="https://hermit.example.com"
+            placeholder="http://localhost:4000"
             required
             value={gatewayUrl}
             onChange={(e) => setGatewayUrl(e.target.value)}
           />
-        </label>
-
-        <label className="field">
-          <span className="field__label">Display Name</span>
-          <input
-            className="field__input"
-            type="text"
-            placeholder="Your name"
-            required
-            autoFocus={isNew}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <span className="field__help">
+            The OpenHermit gateway. Default for local dev: <code>http://localhost:4000</code>.
+          </span>
         </label>
 
         {error && <p className="form-error">{error}</p>}
@@ -114,8 +138,29 @@ export function SetupScreen({ onComplete }: Props) {
           type="submit"
           disabled={!name.trim() || !gatewayUrl.trim() || submitting}
         >
-          {submitting ? 'Connecting...' : 'Continue'}
+          {submitting ? 'Connecting…' : isNew ? 'Get started' : 'Continue'}
         </button>
+
+        <button
+          type="button"
+          className="welcome-toggle"
+          onClick={() => setShowAdvanced((v) => !v)}
+        >
+          {showAdvanced ? 'Hide device details' : 'What is this device key?'}
+        </button>
+        {showAdvanced && (
+          <div className="welcome-advanced">
+            <p className="hint">
+              Your browser generated a private key that proves this device's identity. The
+              gateway never sees the private half — only a fingerprint. No passwords, no
+              email magic links, just this device.
+            </p>
+            <div className="device-key-display">
+              <span className="field__label">Device key fingerprint</span>
+              <code className="device-key-value">{shortFp}</code>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   );

@@ -15,10 +15,15 @@ import {
 import { PickAgentScreen } from './components/PickAgentScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { ChatShell } from './components/ChatShell';
+import { ToastProvider } from './components/Toast';
+import { useTheme } from './components/ThemeToggle';
 
 type Screen = 'loading' | 'setup' | 'pick-agent' | 'chat';
 
 export function App() {
+  // Initialize theme on mount.
+  useTheme();
+
   const [screen, setScreen] = useState<Screen>('loading');
   const [connection, setConn] = useState<Connection | null>(null);
   const [gatewayUrl, setGatewayUrl] = useState<string>('');
@@ -102,24 +107,32 @@ export function App() {
   if (screen === 'loading') return null;
 
   if (screen === 'setup') {
-    return <SetupScreen onComplete={handleSetupComplete} />;
+    return (
+      <ToastProvider>
+        <SetupScreen onComplete={handleSetupComplete} />
+      </ToastProvider>
+    );
   }
 
   if (screen === 'pick-agent') {
     return (
-      <PickAgentScreen
-        gatewayUrl={gatewayUrl}
-        onPick={handlePickAgent}
-        onSignOut={handleSignOut}
-      />
+      <ToastProvider>
+        <PickAgentScreen
+          gatewayUrl={gatewayUrl}
+          onPick={handlePickAgent}
+          onSignOut={handleSignOut}
+        />
+      </ToastProvider>
     );
   }
 
   return (
-    <ChatShell
-      connection={connection!}
-      role={connection?.role ?? null}
-      onDisconnect={handleDisconnect}
-    />
+    <ToastProvider>
+      <ChatShell
+        connection={connection!}
+        role={connection?.role ?? null}
+        onDisconnect={handleDisconnect}
+      />
+    </ToastProvider>
   );
 }

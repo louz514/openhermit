@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentWsClient, fetchAgentInfo, getDisplayName, getUserId, type Connection, type SessionSummary, type HistoryMessage, type OutboundEvent } from '../api';
 import { SessionList } from './SessionList';
 import { ChatMessages, type ChatItem } from './ChatMessages';
 import { Composer } from './Composer';
 import { ManagePanel, type ManageTab } from './ManagePanel';
+import { ChatWelcome } from './ChatWelcome';
+import { OnboardingTour, isTourCompleted } from './OnboardingTour';
+import { ThemeToggle } from './ThemeToggle';
+import { CommandPalette, useCommandPalette, type CommandItem } from './CommandPalette';
 
 const createSessionId = () =>
   `web:${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
@@ -62,6 +66,9 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
   const thinkingAsAssistantRef = useRef(false);
   const skipPushRef = useRef(false);
   const pendingSentTexts = useRef<string[]>([]);
+
+  const [pendingComposerText, setPendingComposerText] = useState<string>('');
+  const [tourActive, setTourActive] = useState<boolean>(() => !isTourCompleted());
 
   currentSessionRef.current = currentSessionId;
 
@@ -490,6 +497,66 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
     }
   };
 
+  // Command palette
+  const palette = useCommandPalette();
+  const commands = useMemo<CommandItem[]>(() => {
+    const out: CommandItem[] = [
+      {
+        id: 'new-session',
+        group: 'Chat',
+        label: 'New session',
+        hint: '⌘ N',
+        icon: '✦',
+        action: () => { setView('chat'); void createNewSession(); },
+        keywords: ['create', 'thread'],
+      },
+    ];
+    for (const s of sessions.slice(0, 8)) {
+      out.push({
+        id: `session:${s.sessionId}`,
+        group: 'Sessions',
+        label: s.title || s.sessionId,
+        hint: s.source?.platform ?? s.source?.kind ?? '',
+        icon: '◌',
+        action: () => { void selectSession(s.sessionId); },
+        keywords: [s.sessionId],
+      });
+    }
+    if (isOwner) {
+      const tabs: { id: ManageTab; label: string; icon: string }[] = [
+        { id: 'basic', label: 'Basic', icon: '⚙' },
+        { id: 'secrets', label: 'Secrets', icon: '🔑' },
+        { id: 'channels', label: 'Channels', icon: '💬' },
+        { id: 'skills', label: 'Skills', icon: '🛠' },
+        { id: 'mcp', label: 'MCP', icon: '🧩' },
+        { id: 'schedules', label: 'Schedules', icon: '⏰' },
+        { id: 'policies', label: 'Policies', icon: '🛡' },
+      ];
+      for (const t of tabs) {
+        out.push({
+          id: `manage:${t.id}`,
+          group: 'Manage',
+          label: `Open ${t.label}`,
+          hint: 'Manage panel',
+          icon: t.icon,
+          action: () => { setView('manage'); setManageTab(t.id); },
+          keywords: ['settings', 'config'],
+        });
+      }
+    }
+    out.push(
+      {
+        id: 'disconnect',
+        group: 'Account',
+        label: 'Disconnect from this agent',
+        icon: '⏻',
+        action: onDisconnect,
+        keywords: ['logout', 'sign out', 'leave'],
+      },
+    );
+    return out;
+  }, [sessions, isOwner, createNewSession, selectSession, onDisconnect]);
+
   return (
     <div className={`shell shell--${mobileMode}`}>
       <aside className="sidebar">
@@ -513,6 +580,19 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
               <p className="sidebar__meta">Agent: {agentName || connection.agentId}</p>
             </div>
           </a>
+          <button
+            type="button"
+            className="cmdk-trigger"
+            onClick={() => palette.setOpen(true)}
+            aria-label="Open command palette"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <span>Search or jump…</span>
+            <kbd>⌘K</kbd>
+          </button>
           <div className="sidebar__buttons">
             <button
               className="btn btn--primary"
@@ -526,6 +606,7 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
             {isOwner && (
               <button
                 className={`btn btn--ghost${view === 'manage' ? ' is-active' : ''}`}
+                data-tour="manage"
                 onClick={() => {
                   if (view === 'manage') {
                     setView('chat');
@@ -549,13 +630,14 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
         <div className="sidebar__footer">
           <div>
             <div className="sidebar__footer-name">
-              <span className="sidebar__footer-dot" />
+              <span className={`live-pulse${status === 'Connected' ? '' : ' live-pulse--idle'}`} />
               {getDisplayName() || 'Anonymous'}
               {getUserId() && <span className="sidebar__footer-uid"> · {getUserId()}</span>}
             </div>
             <div className="sidebar__footer-auth">Auth: device key · WS</div>
           </div>
           <button className="btn btn--ghost btn--sm" onClick={onDisconnect}>Disconnect</button>
+          <ThemeToggle />
         </div>
       </aside>
 
@@ -596,18 +678,45 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
               <p className="chat__status">{status}</p>
             </header>
 
-            <ChatMessages items={items} agentName={agentName ?? undefined} loading={loadingHistory} onApproval={handleApproval} />
+            <ChatMessages
+              items={items}
+              agentName={agentName ?? undefined}
+              loading={loadingHistory}
+              onApproval={handleApproval}
+              emptyState={
+                <ChatWelcome
+                  agentName={agentName || connection.agentId}
+                  isOwner={isOwner}
+                  onUseExample={(text) => setPendingComposerText(text)}
+                  onOpenManage={isOwner ? () => { setView('manage'); setManageTab('basic'); } : undefined}
+                />
+              }
+            />
 
             {readOnly ? (
               <div className="composer composer--readonly">
                 <span>Read-only — this session was created via {currentSession.source?.platform || currentSession.source?.kind || 'another channel'}</span>
               </div>
             ) : (
-              <Composer onSend={sendMessage} disabled={sending || !currentSessionId} />
+              <Composer
+                onSend={sendMessage}
+                disabled={sending || !currentSessionId}
+                pendingText={pendingComposerText}
+                onConsumePendingText={() => setPendingComposerText('')}
+              />
             )}
           </>
         )}
       </main>
+      <OnboardingTour
+        enabled={tourActive && view === 'chat'}
+        onDismiss={() => setTourActive(false)}
+      />
+      <CommandPalette
+        open={palette.open}
+        onClose={() => palette.setOpen(false)}
+        commands={commands}
+      />
     </div>
   );
 }

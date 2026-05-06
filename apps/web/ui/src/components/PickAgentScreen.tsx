@@ -92,7 +92,23 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
         </h3>
         {memberships === null && <p className="hint">Loading…</p>}
         {memberships !== null && memberships.length === 0 && (
-          <p className="hint">No agent memberships yet — join one below.</p>
+          <div className="pick-empty">
+            <div className="pick-empty__icon">✨</div>
+            <h3 className="pick-empty__title">No agents yet</h3>
+            <p className="hint">
+              An OpenHermit agent is a persistent AI assistant with its own memory, skills, and
+              workspace. You'll need an <strong>agent ID</strong> from your administrator (or
+              create one yourself with <code>hermit agents create &lt;id&gt;</code>), then join it
+              below.
+            </p>
+            <p className="hint">
+              Try the default starter ID: <button
+                type="button"
+                className="link-btn"
+                onClick={() => { setJoinAgentId('main'); setJoinOpen(true); }}
+              >main</button>
+            </p>
+          </div>
         )}
         {memberships !== null && memberships.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
