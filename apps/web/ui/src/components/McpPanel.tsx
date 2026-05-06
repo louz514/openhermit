@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchMcpServers, disableMcpServer, type McpServerInfo } from '../api';
+import { useToast } from './Toast';
 
 export function McpPanel() {
+  const { toast } = useToast();
   const [servers, setServers] = useState<McpServerInfo[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,11 +22,17 @@ export function McpPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const handleDisable = async (serverId: string) => {
+    const target = servers.find((s) => s.id === serverId);
+    const snapshot = servers;
+    setServers((arr) => arr.filter((s) => s.id !== serverId));
     try {
       await disableMcpServer(serverId);
-      await load();
+      toast(`Disabled ${target?.name ?? serverId}`, 'success');
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to disable: ${msg}`, 'error');
+      setServers(snapshot);
     }
   };
 

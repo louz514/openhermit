@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchAgentSecrets, setAgentSecret, deleteAgentSecret } from '../api';
+import { useToast } from './Toast';
 
 interface RowState {
   key: string;
@@ -12,6 +13,7 @@ interface RowState {
 }
 
 export function SecretsPanel() {
+  const { toast } = useToast();
   const [rows, setRows] = useState<RowState[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,22 +50,29 @@ export function SecretsPanel() {
     updateRow(key, { busy: true });
     try {
       await setAgentSecret(key, row.draft);
+      toast(`Saved ${key}`, 'success');
       await loadFromServer();
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to save ${key}: ${msg}`, 'error');
       updateRow(key, { busy: false });
     }
   };
 
   const deleteRow = async (key: string) => {
     setError('');
-    updateRow(key, { busy: true });
+    // Optimistic: remove the row immediately, restore on failure.
+    const snapshot = rows;
+    setRows((rs) => rs.filter((r) => r.key !== key));
     try {
       await deleteAgentSecret(key);
-      await loadFromServer();
+      toast(`Deleted ${key}`, 'success');
     } catch (err) {
-      setError((err as Error).message);
-      updateRow(key, { busy: false });
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to delete ${key}: ${msg}`, 'error');
+      setRows(snapshot);
     }
   };
 
@@ -78,11 +87,14 @@ export function SecretsPanel() {
     setAdding(true);
     try {
       await setAgentSecret(k, newValue);
+      toast(`Added ${k}`, 'success');
       setNewKey('');
       setNewValue('');
       await loadFromServer();
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to add ${k}: ${msg}`, 'error');
     } finally {
       setAdding(false);
     }

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchSkills, disableSkill, enableSkill, type SkillInfo } from '../api';
+import { useToast } from './Toast';
 
 export function SkillsPanel() {
+  const { toast } = useToast();
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,15 +22,26 @@ export function SkillsPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const handleToggle = async (skill: SkillInfo) => {
+    // Optimistic flip: swap source between 'system' (enabled) and other.
+    const wasEnabled = skill.source === 'system';
+    const snapshot = skills;
+    setSkills((arr) =>
+      arr.map((s) => (s.id === skill.id ? { ...s, source: wasEnabled ? 'available' : 'system' } as SkillInfo : s)),
+    );
     try {
-      if (skill.source === 'system') {
+      if (wasEnabled) {
         await disableSkill(skill.id);
+        toast(`Disabled ${skill.name}`, 'success');
       } else {
         await enableSkill(skill.id);
+        toast(`Enabled ${skill.name}`, 'success');
       }
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed: ${msg}`, 'error');
+      setSkills(snapshot);
     }
   };
 
