@@ -1,31 +1,70 @@
 /* ── Reset & base ───────────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --bg: #ffffff;
-  --bg-surface: #fafafa;
-  --bg-hover: #f4f4f5;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --text: #09090b;
-  --text-muted: #71717a;
-  --text-dim: #a1a1aa;
-  --accent: #09090b;        /* primary buttons — match website's black CTA */
-  --accent-hover: #27272a;
-  --brand: #ee5c2c;         /* orange highlight — used sparingly */
-  --green: #16a34a;
-  --red: #dc2626;
-  --yellow: #ca8a04;
-  --radius: 8px;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+/* Claude brand palette
+ * Coral primary  : #C96442 / #D97757
+ * Ivory cream    : #FAF9F5 / #F0EEE6
+ * Warm charcoal  : #262624 / #1F1E1D
+ */
+:root, [data-theme="dark"] {
+  --bg: #1F1E1D;
+  --bg-surface: #262624;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #FAF9F5;
+  --text-muted: #B8B5AC;
+  --text-dim: #807D74;
+  --accent: #D97757;
+  --accent-hover: #E08A6B;
+  --accent-soft: rgba(217, 119, 87, 0.14);
+  --accent-glow: rgba(217, 119, 87, 0.45);
+  --gradient-accent: linear-gradient(135deg, #C96442 0%, #D97757 50%, #E5A380 100%);
+  --gradient-mesh:
+    radial-gradient(at 20% 10%, rgba(217, 119, 87, 0.20) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(201, 100, 66, 0.14) 0px, transparent 45%),
+    radial-gradient(at 90% 80%, rgba(229, 163, 128, 0.10) 0px, transparent 50%),
+    radial-gradient(at 0% 90%, rgba(217, 119, 87, 0.10) 0px, transparent 50%);
+  --brand: #D97757;
+  --green: #6FA17C;
+  --red: #C9534F;
+  --yellow: #D4A24C;
+  --radius: 10px;
+  --font: 'Inter', 'Söhne', 'Styrene', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --serif: 'Source Serif 4', 'Tiempos Headline', 'Copernicus', 'Georgia', serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
+[data-theme="light"] {
+  --bg: #FAF9F5;
+  --bg-surface: #FFFFFF;
+  --bg-hover: rgba(38, 38, 36, 0.04);
+  --border: rgba(38, 38, 36, 0.10);
+  --border-strong: rgba(38, 38, 36, 0.18);
+  --text: #262624;
+  --text-muted: #5C5A52;
+  --text-dim: #91897C;
+  --accent: #C96442;
+  --accent-hover: #B5563A;
+  --accent-soft: rgba(201, 100, 66, 0.10);
+  --accent-glow: rgba(201, 100, 66, 0.30);
+  --gradient-accent: linear-gradient(135deg, #B5563A 0%, #C96442 50%, #D97757 100%);
+  --gradient-mesh:
+    radial-gradient(at 20% 10%, rgba(201, 100, 66, 0.10) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(217, 119, 87, 0.08) 0px, transparent 45%),
+    radial-gradient(at 90% 80%, rgba(229, 163, 128, 0.07) 0px, transparent 50%),
+    radial-gradient(at 0% 90%, rgba(201, 100, 66, 0.06) 0px, transparent 50%);
+  --brand: #C96442;
+  --green: #4F8A5F;
+  --red: #B43E3A;
+  --yellow: #B8862F;
+}
+
 html, body {
-  background: #ffffff;
+  background: var(--bg);
 }
 
 body {
@@ -33,14 +72,30 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  background: var(--bg);
+  background-image: var(--gradient-mesh);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+::selection { background: var(--accent-soft); color: var(--accent-hover); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-dim); background-clip: padding-box; }
+
+/* Apply persisted theme on load */
+
 /* ── Typography ─────────────────────────────────────────────────────────── */
 
-h1 { font-size: 1.5rem; font-weight: 600; }
-h2 { font-size: 1.25rem; font-weight: 600; }
+h1 { font-family: var(--serif); font-size: 1.6rem; font-weight: 600; letter-spacing: -0.015em; }
+h2 { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
 h3 { font-size: 1.1rem; font-weight: 600; }
 
 .eyebrow {
@@ -1048,3 +1103,88 @@ dialog::backdrop { background: rgba(9, 9, 11, 0.4); }
 .users-role--owner { background: rgba(238, 92, 44, 0.12); color: var(--brand); }
 .users-role--user { background: rgba(22, 163, 74, 0.1); color: var(--green); }
 .users-role--guest { background: var(--bg-hover); color: var(--text-muted); }
+
+/* ─── Fleet hero ────────────────────────────────────────────────── */
+
+.fleet-hero {
+  margin: -16px -16px 16px;
+  padding: 24px 28px 22px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.18), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(168, 85, 247, 0.14), transparent 50%),
+    var(--panel, #fff);
+  border-bottom: 1px solid var(--line, rgba(0,0,0,0.06));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.fleet-hero__title h1 {
+  font-size: 22px;
+  margin: 4px 0 4px;
+  font-weight: 600;
+}
+.fleet-hero__subtitle {
+  margin: 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 12.5px;
+}
+
+.fleet-hero__stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fleet-stat {
+  min-width: 96px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.65);
+  border: 1px solid var(--line, rgba(0,0,0,0.08));
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  backdrop-filter: blur(6px);
+}
+.fleet-stat__value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text, #111);
+  font-variant-numeric: tabular-nums;
+}
+.fleet-stat__label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #6b7280);
+  font-weight: 500;
+}
+.fleet-stat--good .fleet-stat__value { color: #16a34a; }
+.fleet-stat--bad .fleet-stat__value { color: #dc2626; }
+
+@media (max-width: 720px) {
+  .fleet-hero { flex-direction: column; align-items: stretch; }
+  .fleet-stat { min-width: 80px; flex: 1; }
+}
+
+/* ── Admin theme toggle ─────────────────────────────────────────────────── */
+.topbar__theme {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+.topbar__theme:hover { color: var(--accent-hover); border-color: var(--accent-soft); background: var(--accent-soft); transform: rotate(15deg); }

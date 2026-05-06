@@ -145,8 +145,45 @@ export function FleetPanel() {
     errors: fleet.reduce((acc, a) => acc + a.errors24h, 0),
   }), [fleet]);
 
+  const totalChannels = useMemo(
+    () => new Set(fleet.flatMap((a) => a.channels)).size,
+    [fleet],
+  );
+
   return (
     <div className="panel">
+      <div className="fleet-hero">
+        <div className="fleet-hero__title">
+          <p className="eyebrow">Fleet overview</p>
+          <h1>Your agents at a glance</h1>
+          <p className="fleet-hero__subtitle">
+            All agents on this gateway. Refreshes every 10 seconds.
+          </p>
+        </div>
+        <div className="fleet-hero__stats">
+          <div className="fleet-stat">
+            <span className="fleet-stat__value">{fleet.length}</span>
+            <span className="fleet-stat__label">Agents</span>
+          </div>
+          <div className="fleet-stat fleet-stat--good">
+            <span className="fleet-stat__value">{totals.running}</span>
+            <span className="fleet-stat__label">Running</span>
+          </div>
+          <div className="fleet-stat">
+            <span className="fleet-stat__value">{totals.sessions}</span>
+            <span className="fleet-stat__label">Sessions / 24h</span>
+          </div>
+          <div className={`fleet-stat${totals.errors > 0 ? ' fleet-stat--bad' : ''}`}>
+            <span className="fleet-stat__value">{totals.errors}</span>
+            <span className="fleet-stat__label">Errors / 24h</span>
+          </div>
+          <div className="fleet-stat">
+            <span className="fleet-stat__value">{totalChannels}</span>
+            <span className="fleet-stat__label">Channels</span>
+          </div>
+        </div>
+      </div>
+
       <div className="panel__header">
         <h2>
           Agents
