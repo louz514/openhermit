@@ -5,8 +5,10 @@ import {
   buildPrincipal,
   canAccess,
   matchesGrant,
+  parseMcpServerId,
   resolveExecGrants,
   resolveFilePathGrants,
+  resolveMcpGrants,
   resolveToolGrants,
   type Grant,
   type PolicyRow,
@@ -417,4 +419,71 @@ test('resolveExecGrants: cwd scope skipped when no cwd provided', () => {
   // No cwd passed → cwd-scoped row is skipped
   const grants = resolveExecGrants(rows, 'primary', 'ls');
   assert.deepEqual(grants, [{ type: 'role', value: 'owner' }]);
+});
+
+// ── parseMcpServerId ─────────────────────────────────────────────────
+
+test('parseMcpServerId: extracts server ID from mcp tool name', () => {
+  assert.equal(parseMcpServerId('mcp__weather__get_forecast'), 'weather');
+  assert.equal(parseMcpServerId('mcp__my-server__tool'), 'my-server');
+});
+
+test('parseMcpServerId: returns undefined for non-MCP tools', () => {
+  assert.equal(parseMcpServerId('exec'), undefined);
+  assert.equal(parseMcpServerId('file_read'), undefined);
+  assert.equal(parseMcpServerId('mcp_status'), undefined);
+});
+
+test('parseMcpServerId: returns undefined for malformed MCP names', () => {
+  assert.equal(parseMcpServerId('mcp__noseparator'), undefined);
+});
+
+// ── resolveMcpGrants ─────────────────────────────────────────────────
+
+test('resolveMcpGrants: returns undefined when no mcp rows', () => {
+  assert.equal(resolveMcpGrants([], 'weather'), undefined);
+});
+
+test('resolveMcpGrants: exact server match', () => {
+  const rows: PolicyRow[] = [{
+    agentId: 'a', resourceType: 'mcp', resourceKey: 'weather',
+    grants: [{ type: 'role', value: 'owner' }],
+    scope: {},
+  }];
+  assert.deepEqual(resolveMcpGrants(rows, 'weather'), [{ type: 'role', value: 'owner' }]);
+});
+
+test('resolveMcpGrants: wildcard matches any server', () => {
+  const rows: PolicyRow[] = [{
+    agentId: 'a', resourceType: 'mcp', resourceKey: '*',
+    grants: [{ type: 'any' }],
+    scope: {},
+  }];
+  assert.deepEqual(resolveMcpGrants(rows, 'anything'), [{ type: 'any' }]);
+});
+
+test('resolveMcpGrants: exact match takes priority over wildcard', () => {
+  const rows: PolicyRow[] = [
+    {
+      agentId: 'a', resourceType: 'mcp', resourceKey: '*',
+      grants: [{ type: 'any' }],
+      scope: {},
+    },
+    {
+      agentId: 'a', resourceType: 'mcp', resourceKey: 'secret-server',
+      grants: [{ type: 'role', value: 'owner' }],
+      scope: {},
+    },
+  ];
+  assert.deepEqual(resolveMcpGrants(rows, 'secret-server'), [{ type: 'role', value: 'owner' }]);
+  assert.deepEqual(resolveMcpGrants(rows, 'other-server'), [{ type: 'any' }]);
+});
+
+test('resolveMcpGrants: no matching server denied', () => {
+  const rows: PolicyRow[] = [{
+    agentId: 'a', resourceType: 'mcp', resourceKey: 'weather',
+    grants: [{ type: 'any' }],
+    scope: {},
+  }];
+  assert.deepEqual(resolveMcpGrants(rows, 'calendar'), []);
 });

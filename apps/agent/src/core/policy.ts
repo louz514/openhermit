@@ -193,6 +193,44 @@ export const resolveExecGrants = (
   return [];
 };
 
+// ── MCP server policy ─────────────────────────────────────────────────
+
+/**
+ * Resolve MCP server-level grants. Returns undefined if no mcp policy
+ * rows exist (caller should fall back to tool-level policy). Returns Grant[]
+ * if a matching row is found. Returns empty [] (deny) if rows exist but none match.
+ */
+export const resolveMcpGrants = (
+  mcpRows: PolicyRow[],
+  serverId: string,
+): Grant[] | undefined => {
+  if (mcpRows.length === 0) return undefined;
+
+  // Exact match first
+  for (const row of mcpRows) {
+    if (row.resourceKey === serverId) return row.grants as Grant[];
+  }
+  // Wildcard
+  for (const row of mcpRows) {
+    if (row.resourceKey === '*') return row.grants as Grant[];
+  }
+
+  return [];
+};
+
+/**
+ * Extract the MCP server ID from a tool name following the
+ * `mcp__serverId__toolName` naming convention. Returns undefined
+ * if the name does not match.
+ */
+export const parseMcpServerId = (toolName: string): string | undefined => {
+  if (!toolName.startsWith('mcp__')) return undefined;
+  const rest = toolName.slice(5);
+  const sep = rest.indexOf('__');
+  if (sep === -1) return undefined;
+  return rest.slice(0, sep);
+};
+
 export const buildPrincipal = (
   agentId: string,
   userId?: string,

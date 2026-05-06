@@ -19,6 +19,8 @@ import {
   ExecBackendManager,
   buildPrincipal,
   canAccess,
+  parseMcpServerId,
+  resolveMcpGrants,
   resolveToolGrants,
   type AgentConfig,
   type PolicyRow,
@@ -1567,9 +1569,18 @@ export class AgentRunner implements SessionRuntime {
     const policyRows: PolicyRow[] | undefined = this.options.policyStore
       ? await this.options.policyStore.list(this.scope.agentId, 'tool')
       : undefined;
-    const filteredTools = tools.filter((t: any) =>
-      canAccess(principal, resolveToolGrants(policyRows, t.name, t.policy)),
-    );
+    const mcpRows: PolicyRow[] | undefined = this.options.policyStore
+      ? await this.options.policyStore.list(this.scope.agentId, 'mcp')
+      : undefined;
+    const filteredTools = tools.filter((t: any) => {
+      if (!canAccess(principal, resolveToolGrants(policyRows, t.name, t.policy))) return false;
+      const serverId = parseMcpServerId(t.name);
+      if (serverId && mcpRows) {
+        const mcpGrants = resolveMcpGrants(mcpRows, serverId);
+        if (mcpGrants !== undefined && !canAccess(principal, mcpGrants)) return false;
+      }
+      return true;
+    });
 
     const currentUser = input.userId && input.userRole
       ? {
