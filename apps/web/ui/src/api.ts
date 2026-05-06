@@ -189,6 +189,48 @@ export const setConnection = (conn: Connection): void => {
 export const getApiBase = (): string => apiBase;
 export const getGatewayBase = (): string => gatewayBase;
 
+// ─── Device key export (for backup / multi-device) ─────────────────────────
+
+/**
+ * Export the device's JWK keypair as a JSON string. This is the FULL
+ * private key — anyone who has it can authenticate as this device.
+ * Treat it like a password and never paste into untrusted forms.
+ */
+export const exportDeviceKey = (): string | null => {
+  const stored = readDeviceStorage();
+  if (!stored) return null;
+  return JSON.stringify({
+    publicKey: stored.publicKey,
+    privateKey: stored.privateKey,
+    ...(stored.displayName ? { displayName: stored.displayName } : {}),
+  }, null, 2);
+};
+
+/**
+ * Restore a device key from a previously exported JSON string. Returns
+ * `true` on success. Caller should then call `exchangeToken()` to get a
+ * fresh JWT.
+ */
+export const importDeviceKey = (json: string): boolean => {
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== 'object') return false;
+    if (!parsed.publicKey || !parsed.privateKey) return false;
+    writeDeviceStorage({
+      publicKey: parsed.publicKey,
+      privateKey: parsed.privateKey,
+      ...(parsed.displayName ? { displayName: parsed.displayName } : {}),
+    });
+    deviceKeyPair = null; // force reload on next use
+    jwtToken = null;
+    jwtExpiresAt = 0;
+    localStorage.removeItem(JWT_STORAGE);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // ─── Display name ──────────────────────────────────────────────────────────
 
 export const getDisplayName = (): string | null => readDeviceStorage()?.displayName ?? null;
