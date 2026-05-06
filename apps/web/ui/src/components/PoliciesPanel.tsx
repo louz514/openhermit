@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPolicies, upsertPolicy, deletePolicy, type PolicyInfo } from '../api';
 
+const RESOURCE_TYPES = [
+  { value: 'tool', label: 'Tool', placeholder: 'e.g. exec, file_write, memory_add' },
+  { value: 'mcp', label: 'MCP Server', placeholder: 'e.g. weather, github, *' },
+  { value: 'file', label: 'File', placeholder: 'e.g. /etc/*, /home/user/.env' },
+] as const;
+
 const GRANT_PRESETS: { label: string; grants: Array<{ type: 'any' | 'role'; value?: string }> }[] = [
   { label: 'Everyone', grants: [{ type: 'any' }] },
   { label: 'Owner only', grants: [{ type: 'role', value: 'owner' }] },
@@ -54,10 +60,9 @@ export function PoliciesPanel() {
       <div className="policies-panel__intro">
         <p className="eyebrow">Access Policies</p>
         <p className="policies-panel__hint">
-          Override the default access level for tools. Each policy maps a tool
-          name to a set of grants that control who can use it. Use <code>*</code> suffix
-          for prefix matching (e.g. <code>mcp__weather__*</code> covers all tools
-          from that MCP server). Tools without a custom policy use their built-in defaults.
+          Control access to tools, MCP servers, and file paths. Each policy maps a
+          resource to grants (who it applies to) and an effect (allow, deny, or require
+          approval). Use <code>*</code> suffix for prefix matching.
         </p>
       </div>
 
@@ -106,6 +111,7 @@ export function PoliciesPanel() {
 
 function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [resourceType, setResourceType] = useState('tool');
   const [resourceKey, setResourceKey] = useState('');
   const [effect, setEffect] = useState<'allow' | 'deny' | 'require_approval'>('allow');
   const [preset, setPreset] = useState(2); // default: Owner + User
@@ -115,6 +121,8 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
   const [err, setErr] = useState('');
 
   useEffect(() => { dialogRef.current?.showModal(); }, []);
+
+  const currentType = RESOURCE_TYPES.find((t) => t.value === resourceType) ?? RESOURCE_TYPES[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +145,7 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
     setBusy(true);
     setErr('');
     try {
-      await upsertPolicy({ resourceType: 'tool', resourceKey: key, effect, grants });
+      await upsertPolicy({ resourceType, resourceKey: key, effect, grants });
       onClose();
       onCreated();
     } catch (error) {
@@ -149,15 +157,28 @@ function CreatePolicyDialog({ onClose, onCreated }: { onClose: () => void; onCre
   return (
     <dialog ref={dialogRef} className="manage__dialog" onClose={onClose}>
       <form className="manage__dialog-form" onSubmit={handleSubmit}>
-        <h3>Add Tool Policy</h3>
+        <h3>Add Policy</h3>
         <label className="manage__field">
-          <span className="manage__field-label">Tool name</span>
+          <span className="manage__field-label">Resource type</span>
+          <select
+            className="manage__field-input"
+            value={resourceType}
+            onChange={(e) => setResourceType(e.target.value)}
+            disabled={busy}
+          >
+            {RESOURCE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="manage__field">
+          <span className="manage__field-label">Resource key</span>
           <input
             className="manage__field-input"
             required
             value={resourceKey}
             onChange={(e) => setResourceKey(e.target.value)}
-            placeholder="e.g. exec, file_write, mcp__server__*"
+            placeholder={currentType.placeholder}
             disabled={busy}
           />
         </label>
