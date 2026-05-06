@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentWsClient, fetchAgentInfo, getDisplayName, getUserId, type Connection, type SessionSummary, type HistoryMessage, type OutboundEvent } from '../api';
 import { SessionList } from './SessionList';
 import { ChatMessages, type ChatItem } from './ChatMessages';
 import { Composer } from './Composer';
-import { ManagePanel, type ManageTab } from './ManagePanel';
+// ManagePanel pulls in every settings sub-panel; only owners ever open it.
+const ManagePanel = lazy(() => import('./ManagePanel').then((m) => ({ default: m.ManagePanel })));
+import type { ManageTab } from './ManagePanel';
 import { ChatWelcome } from './ChatWelcome';
 import { OnboardingTour, isTourCompleted } from './OnboardingTour';
 import { ThemeToggle } from './ThemeToggle';
@@ -658,7 +660,9 @@ export function ChatShell({ connection, role, onDisconnect }: Props) {
               </div>
             </header>
             <div className="chat__manage-area">
-              <ManagePanel tab={manageTab} onTabChange={setManageTab} />
+              <Suspense fallback={<div className="chat__manage-loading">Loading…</div>}>
+                <ManagePanel tab={manageTab} onTabChange={setManageTab} />
+              </Suspense>
             </div>
           </>
         ) : (

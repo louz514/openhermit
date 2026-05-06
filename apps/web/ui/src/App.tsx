@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   loadConnection,
   loadGatewayUrl,
@@ -14,7 +14,9 @@ import {
 } from './api';
 import { PickAgentScreen } from './components/PickAgentScreen';
 import { SetupScreen } from './components/SetupScreen';
-import { ChatShell } from './components/ChatShell';
+// ChatShell pulls in the markdown + KaTeX stack — keep it out of the
+// initial bundle for users still on Setup/PickAgent.
+const ChatShell = lazy(() => import('./components/ChatShell').then((m) => ({ default: m.ChatShell })));
 import { ToastProvider } from './components/Toast';
 import { useTheme } from './components/ThemeToggle';
 
@@ -128,11 +130,13 @@ export function App() {
 
   return (
     <ToastProvider>
-      <ChatShell
-        connection={connection!}
-        role={connection?.role ?? null}
-        onDisconnect={handleDisconnect}
-      />
+      <Suspense fallback={null}>
+        <ChatShell
+          connection={connection!}
+          role={connection?.role ?? null}
+          onDisconnect={handleDisconnect}
+        />
+      </Suspense>
     </ToastProvider>
   );
 }
