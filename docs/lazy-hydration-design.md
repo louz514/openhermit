@@ -1,16 +1,16 @@
 # Lazy Hydration & Multi-Tenant Scaling Design
 
-**Status:** Draft — not yet implemented
+**Status:** Phases 1–5 shipped on `main`. Two items in the original Phase 4 list (per-bot multi-agent routing, channel-state externalization to Postgres) turned out not to be required under the single-gateway / one-bot-per-agent model and are dropped from scope; see Phase 4 #4–#5.
 **Goal:** Support 1000–2000 agents per gateway instance on a 64 GB Railway container
 
 ---
 
-## Background
+## Background (historical — pre-refactor)
 
-Today the gateway eagerly hydrates every agent at boot:
+Before this work the gateway eagerly hydrated every agent at boot:
 
-- `apps/gateway/src/index.ts:375-420` — on startup (when `autoStartAgents=true`), iterates every row in `agents` and calls `instances.start()`.
-- `AgentInstanceManager.runners: Map<agentId, AgentRunner>` is populated forever; there is no idle eviction, no LRU, no TTL.
+- `apps/gateway/src/index.ts` iterated every row in `agents` on startup (under `autoStartAgents=true`) and called `instances.start()`.
+- `AgentInstanceManager.runners: Map<agentId, AgentRunner>` was populated forever; there was no idle eviction, no LRU, no TTL.
 - Per-agent in-process resources held by the runner: scheduler timers, MCP client connections, channel adapters (Slack Socket Mode WebSocket, Discord WebSocket, Telegram polling loop), session event broker, workspace/container manager.
 
 Per-agent baseline ≈ 6–15 MB. With 1000–2000 agents this is 10–20 GB of always-hot memory plus full event-loop pressure even when most agents are idle.
@@ -151,16 +151,14 @@ Assumptions: idle TTL 30 min, ~5 % of agents active in a 30 min window, average 
 
 ## Implementation Plan
 
-### Prerequisite (separate PR, lands on `main` first)
+### Prerequisite — MCP async loading ✅ shipped
 
-**MCP async loading.** Independently valuable — fixes today's "one bad MCP server stalls agent boot" and slow gateway startup, in the same spirit as the existing lazy sandbox provisioning. Not coupled to the lazy-hydration refactor and shipped as its own PR.
+Lives in `apps/agent/src/mcp-client.ts`. Independently valuable — fixed "one bad MCP server stalls agent boot" and slow gateway startup. Required for sub-second cold hydration.
 
-1. Runner construction returns immediately without awaiting MCP `connect()`.
-2. Each MCP client connects in the background; tool list is recomputed as connections complete.
-3. Agent observes connection state (`pending` / `connected` / `failed`); system prompt / tool surface reflects what is currently available.
-4. Tool calls against a not-yet-connected server return a clear, recoverable error ("MCP server X still connecting").
-
-This PR lands first because it is the prerequisite for sub-second hydration latency in the lazy branch — without it, every cold hydration would block on synchronous MCP `connect()`, exposing users to slow first messages.
+1. ✅ `connectAll()` is fire-and-forget; runner construction does not await MCP `connect()`.
+2. ✅ Each client connects in the background; `getToolsets()` filters on `status === 'connected'` so the tool surface grows as connections complete.
+3. ✅ `getStatus()` exposes per-server `'connecting' | 'connected' | 'disconnected' | 'error'` plus `lastError` / `connectedAt`.
+4. ✅ Tool calls on a still-connecting server return `"MCP server … is still connecting. Try again in a moment."`
 
 ### Lazy-hydration branch
 
@@ -199,17 +197,22 @@ One long-lived feature branch `feat/lazy-hydration` off `main` (after the MCP as
 
 ### Phase 4 — Channel connection pooling
 
-1. Telegram polling loop moves to gateway-level pool.
-2. Slack Socket Mode client moves to gateway-level pool.
-3. Discord client moves to gateway-level pool.
-4. Channel routing table `(channel_kind, connection_id, conversation_id) → agent_id`.
-5. Externalize per-agent channel state (`chatSessions`, `lastEventIds`, approvals) to Postgres.
+1. ✅ Telegram polling loop moves to gateway-level pool (`apps/gateway/src/channel-pool.ts`, PR #29).
+2. ✅ Slack Socket Mode client moves to gateway-level pool.
+3. ✅ Discord client moves to gateway-level pool.
+4. 🚫 **Out of scope.** A `(channel_kind, connection_id, conversation_id) → agent_id` routing table was on the original list to support multiple agents sharing one bot. In the actual product, each agent owns its own Telegram/Slack/Discord credentials (rows in `agent_channels`), so routing is 1:1 and already handled by `ChannelRegistry.register({apiKey, agentId})` in the pool. No use case in v1.
+5. 🚫 **Out of scope.** Externalizing per-agent channel state to Postgres turned out to be unnecessary on inspection:
+   - `chatSessions` / `channelSessions` are pure memoization — on cache miss the bridge falls back to `client.listSessions({metadata})` which already reads from the persisted `sessions` table (`apps/channels/{slack,discord,telegram}/src/bridge.ts`).
+   - `lastEventIds` is the SSE dedup cursor, reset across runner restart via the `ready` / `nextEventId` frame (PR #29).
+   - `pendingApprovals` (Telegram realtime) is valid only for the duration of one in-flight turn — that turn is in-memory by nature, so persisting the map is meaningless.
+   - Async approvals already persist via `approval_requests.short_id` (PR #28).
+   - `chatLocks` / `turnQueues` are per-conversation in-process mutexes; correct as in-memory under single-gateway. Multi-gateway HA is explicitly out of scope (see Open Questions §4) and would require its own design pass anyway.
 
-### Phase 5 — Cleanup
+### Phase 5 — Cleanup ✅ shipped (PR #30)
 
-1. Delete `autoStartAgents` config and the boot-time iteration in `index.ts`.
-2. Update `docs/architecture.md`, `docs/channel-adapter.md`, `docs/storage-model.md`.
-3. End-to-end test: 100+ agents hydrating concurrently, evicting, re-hydrating; cron fires across restart; channel pools survive runner churn.
+1. ✅ Deleted `autoStartAgents` config and the boot-time iteration in `index.ts`.
+2. ✅ Updated `apps/gateway/README.md` and `docs/architecture.md`. (Other doc passes done as needed.)
+3. ⏸ Formal end-to-end load test (100+ agents hydrating concurrently) not run; smoke-tested manually on test.openhermit.ai.
 
 ## Open Questions
 
