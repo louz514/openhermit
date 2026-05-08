@@ -189,6 +189,53 @@ export const setConnection = (conn: Connection): void => {
 export const getApiBase = (): string => apiBase;
 export const getGatewayBase = (): string => gatewayBase;
 
+// ─── Pre-flight readiness probe ────────────────────────────────────────────
+
+export interface GatewayReadiness {
+  ok: boolean;
+  checks: {
+    userStore: boolean;
+    agentStore: boolean;
+    configStore: boolean;
+    secretsKey: boolean;
+    adminTokenConfigured: boolean;
+    ephemeralJwt: boolean;
+  };
+  hints: string[];
+}
+
+/**
+ * Hit the gateway's public readiness endpoint to find out *before* the
+ * user types a password whether the server can actually accept logins.
+ * Distinguishes "not running" (network error) from "running but
+ * misconfigured" (DATABASE_URL missing, etc.).
+ */
+export const probeGateway = async (
+  url: string,
+): Promise<{ kind: 'ok'; readiness: GatewayReadiness }
+        | { kind: 'unreachable'; message: string }
+        | { kind: 'misconfigured'; readiness: GatewayReadiness }> => {
+  const base = url.replace(/\/+$/, '');
+  let response: Response;
+  try {
+    response = await fetch(`${base}/api/readiness`, { method: 'GET' });
+  } catch (err) {
+    return {
+      kind: 'unreachable',
+      message: `Couldn't reach ${base}. Is the gateway running?`,
+    };
+  }
+  if (!response.ok) {
+    return {
+      kind: 'unreachable',
+      message: `Gateway responded ${response.status}. The URL may be wrong, or the gateway is too old to support readiness probes.`,
+    };
+  }
+  const readiness = await response.json() as GatewayReadiness;
+  if (!readiness.ok) return { kind: 'misconfigured', readiness };
+  return { kind: 'ok', readiness };
+};
+
 // ─── Device key export (for backup / multi-device) ─────────────────────────
 
 /**
@@ -283,15 +330,38 @@ export const exchangeToken = async (displayName?: string | null): Promise<TokenE
   const body: Record<string, unknown> = { grant_type: 'device-key', device_key: deviceKey };
   if (displayName) body.display_name = displayName;
 
-  const response = await fetch(`${gatewayBase}/api/auth/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${gatewayBase}/api/auth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    throw new Error(
+      `Couldn't reach the gateway at ${gatewayBase}. Make sure it's running ` +
+      `(\`npm run dev:gateway\`) and the URL is reachable from your browser.`,
+    );
+  }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } }).error?.message || `Token exchange failed (${response.status})`);
+    const serverMsg = (err as { error?: { message?: string } }).error?.message;
+    if (serverMsg) throw new Error(serverMsg);
+    if (response.status === 500) {
+      throw new Error(
+        `Gateway error (500). The gateway is up but its database/user store ` +
+        `isn't configured. Check the gateway logs for missing DATABASE_URL ` +
+        `or migration failures.`,
+      );
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `Gateway rejected the device key (${response.status}). Try generating ` +
+        `a new device key, or restore from a previously exported one.`,
+      );
+    }
+    throw new Error(`Token exchange failed (${response.status}).`);
   }
 
   const result = await response.json() as TokenExchangeResult;
@@ -378,6 +448,7 @@ export class AgentWsClient {
   private disposed = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private subscriptions = new Map<string, number>(); // sessionId → lastEventId
 
   constructor(onEvent: WsEventHandler, onStatus: WsStatusHandler) {
@@ -386,6 +457,33 @@ export class AgentWsClient {
   }
 
   setOnReconnect(cb: () => void): void { this.onReconnect = cb; }
+
+  /**
+   * Schedule a soft reconnect ~60s before the JWT expires so we never
+   * end up on a stale token. The server may close the socket on expiry
+   * anyway, but proactive refresh avoids the visible "Disconnected →
+   * Connecting" blip in the UI.
+   */
+  private scheduleTokenRefresh(): void {
+    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+    if (this.disposed) return;
+    const expiresAtMs = jwtExpiresAt * 1000;
+    const leadMs = 60_000;
+    const delay = Math.max(expiresAtMs - Date.now() - leadMs, 30_000);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      if (this.disposed) return;
+      // Force a fresh JWT and reconnect with it. exchangeToken() will
+      // overwrite jwtToken / jwtExpiresAt, then we close+reconnect so
+      // the new token is used in the WS URL.
+      exchangeToken(getDisplayName())
+        .then(() => {
+          if (this.disposed) return;
+          if (this.ws) this.ws.close();
+        })
+        .catch(() => { /* fall through to onclose's scheduleReconnect */ });
+    }, delay);
+  }
 
   async connect(): Promise<void> {
     const token = await getJwt();
@@ -402,6 +500,7 @@ export class AgentWsClient {
       ws.onopen = () => {
         this.reconnectAttempt = 0;
         this.onStatus('connected');
+        this.scheduleTokenRefresh();
         resolve();
       };
 
@@ -521,6 +620,7 @@ export class AgentWsClient {
   close(): void {
     this.disposed = true;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
     document.removeEventListener('visibilitychange', this.handleVisibility);
     this.ws?.close();
     this.ws = null;
