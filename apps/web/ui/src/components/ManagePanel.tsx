@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BasicPanel } from './BasicPanel';
 import { Icon, type IconName } from './Icon';
+import { confirmDiscardIfDirty } from './dirty-state';
 
 // Each sub-panel pulls its own data + components on first open. BasicPanel
 // stays eager because it's the default tab.
@@ -39,6 +40,11 @@ interface Props {
 
 export function ManagePanel({ tab, onTabChange }: Props) {
   const active = tabs.find((t) => t.id === tab);
+  const requestTab = (next: ManageTab) => {
+    if (next === tab) return;
+    if (!confirmDiscardIfDirty()) return;
+    onTabChange(next);
+  };
   return (
     <div className="manage">
       <div className="manage__tabs">
@@ -46,7 +52,7 @@ export function ManagePanel({ tab, onTabChange }: Props) {
           <button
             key={t.id}
             className={`manage__tab${tab === t.id ? ' active' : ''}`}
-            onClick={() => onTabChange(t.id)}
+            onClick={() => requestTab(t.id)}
             title={t.description}
           >
             <span className="manage__tab-icon"><Icon name={t.icon} size={16} /></span>

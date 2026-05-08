@@ -62,6 +62,17 @@ export function SecretsPanel() {
 
   const deleteRow = async (key: string) => {
     setError('');
+    // Secrets are referenced by name from agent config (`${KEY}` interpolation
+    // in api keys, channel tokens, MCP server urls, etc.) and tasks. We can't
+    // reliably know from the client whether `key` is in use, so warn the
+    // owner before destructive action.
+    const confirmed = window.confirm(
+      `Delete secret "${key}"?\n\n` +
+      `If anything is currently referencing this secret (provider API key, ` +
+      `channel token, MCP server, schedule), it will start failing the next ` +
+      `time it's used. This can't be undone.`,
+    );
+    if (!confirmed) return;
     // Optimistic: remove the row immediately, restore on failure.
     const snapshot = rows;
     setRows((rs) => rs.filter((r) => r.key !== key));

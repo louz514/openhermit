@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
+import { useDirty } from './dirty-state';
 import {
   fetchAgentConfig,
   putAgentConfig,
@@ -88,6 +89,8 @@ export function BasicPanel() {
     || baseUrl !== (config.model?.base_url ?? '')
     || api !== (config.model?.api ?? '')
   );
+
+  useDirty('basic-panel', dirty);
 
   const selectedModelEntry = useMemo(() => {
     const entry = catalog.find((p) => p.provider === provider);
