@@ -19,6 +19,7 @@ import { LandingScreen } from './components/LandingScreen';
 // initial bundle for users still on Setup/PickAgent.
 const ChatShell = lazy(() => import('./components/ChatShell').then((m) => ({ default: m.ChatShell })));
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useTheme } from './components/ThemeToggle';
 
 type Screen = 'loading' | 'landing' | 'setup' | 'pick-agent' | 'chat';
@@ -83,7 +84,16 @@ export function App() {
       } else {
         setResumeTarget('pick-agent');
       }
-      setScreen('landing');
+      // If the user landed deep-linked on a /chat/* URL and we already
+      // have a usable connection, skip the landing flash and jump
+      // straight to the chat. Otherwise fall back to the landing page so
+      // returning visitors can choose where to go next.
+      const onChatRoute = window.location.pathname.startsWith('/chat');
+      if (onChatRoute && saved?.agentId) {
+        setScreen('chat');
+      } else {
+        setScreen('landing');
+      }
     })();
   }, []);
 
@@ -149,14 +159,16 @@ export function App() {
 
   return (
     <ToastProvider>
-      <Suspense fallback={null}>
-        <ChatShell
-          connection={connection!}
-          role={connection?.role ?? null}
-          onDisconnect={handleDisconnect}
-          onGoHome={() => setScreen('landing')}
-        />
-      </Suspense>
+      <ErrorBoundary label="App">
+        <Suspense fallback={null}>
+          <ChatShell
+            connection={connection!}
+            role={connection?.role ?? null}
+            onDisconnect={handleDisconnect}
+            onGoHome={() => setScreen('landing')}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </ToastProvider>
   );
 }

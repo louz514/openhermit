@@ -38,7 +38,7 @@ export function ChatWelcome({ agentName, isOwner, onUseExample, onOpenManage }: 
         </div>
 
         <h3 className="chat-welcome__heading">Try one of these to get started</h3>
-        <div className="chat-welcome__grid">
+        <div className="chat-welcome__grid" data-tour="examples">
           {examples.map((ex) => (
             <button
               key={ex.label}
