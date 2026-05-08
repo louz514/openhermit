@@ -663,6 +663,40 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     c.json({ ok: true, role: 'gateway' }),
   );
 
+  /**
+   * Public readiness probe used by the web setup wizard. Reports which
+   * core subsystems are configured so we can show users a precise list of
+   * what to fix instead of a generic "Token exchange failed (500)".
+   *
+   * Intentionally exposes only booleans + version-style metadata. No
+   * tokens, secrets, or DB URLs leak through.
+   */
+  app.get('/api/readiness', (c) => {
+    const ephemeralJwt = !process.env.GATEWAY_JWT_SECRET;
+    return c.json({
+      ok: !!options.userStore,
+      checks: {
+        userStore: !!options.userStore,
+        agentStore: !!options.agentStore,
+        configStore: !!options.configStore,
+        secretsKey: !!process.env.OPENHERMIT_SECRETS_KEY,
+        adminTokenConfigured: !!options.adminToken,
+        ephemeralJwt,
+      },
+      hints: [
+        ...(!options.userStore
+          ? ['Set DATABASE_URL in ~/.openhermit/gateway/.env so the user store can open.']
+          : []),
+        ...(!process.env.OPENHERMIT_SECRETS_KEY
+          ? ['Set OPENHERMIT_SECRETS_KEY (run `hermit setup`) for encrypted secret storage; falling back to plaintext on disk.']
+          : []),
+        ...(ephemeralJwt
+          ? ['Set GATEWAY_JWT_SECRET so login tokens survive gateway restarts.']
+          : []),
+      ],
+    });
+  });
+
   // --- prometheus metrics (no auth — bind to localhost or scrape via reverse proxy) ---
 
   app.get('/metrics', async (c) => {
