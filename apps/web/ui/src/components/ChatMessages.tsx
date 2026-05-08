@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { marked, type TokenizerExtension, type RendererExtension } from 'marked';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -102,6 +102,7 @@ interface Props {
 // ─── Components ────────────────────────────────────────────────────────────
 
 function ToolCard({ item }: { item: Extract<ChatItem, { type: 'tool' }> }) {
+  const [expanded, setExpanded] = useState(false);
   const icon = item.phase === 'done'
     ? (item.isError ? '✗' : '✓')
     : (item.phase === 'running' ? '●' : '○');
@@ -139,9 +140,24 @@ function ToolCard({ item }: { item: Extract<ChatItem, { type: 'tool' }> }) {
             <pre className="tool-card__args">{formatArgs(item.args)}</pre>
           )}
           {item.result && (
-            <pre className="tool-card__result">
-              {item.result.length > 800 ? item.result.slice(0, 800) + '...' : item.result}
-            </pre>
+            <>
+              <pre className="tool-card__result">
+                {expanded || item.result.length <= 800
+                  ? item.result
+                  : item.result.slice(0, 800) + '…'}
+              </pre>
+              {item.result.length > 800 && (
+                <button
+                  type="button"
+                  className="tool-card__expand"
+                  onClick={(e) => { e.preventDefault(); setExpanded((v) => !v); }}
+                >
+                  {expanded
+                    ? 'Show less'
+                    : `Show full output (${item.result.length.toLocaleString()} chars)`}
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -213,12 +229,47 @@ function groupIntoTurns(items: ChatItem[]): Turn[] {
 export function ChatMessages({ items, agentName, loading, onApproval, emptyState }: Props) {
   const containerRef = useRef<HTMLElement>(null);
   const displayAgentName = agentName || 'Assistant';
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // Track whether the user has scrolled away from the bottom. We auto-scroll
+  // only when they are near the bottom; otherwise we surface a "jump to
+  // latest" pill so new messages don't yank them away from older history.
+  const isPinnedToBottomRef = useRef(true);
+
+  const isNearBottom = useCallback((el: HTMLElement) => {
+    const threshold = 80; // px
+    return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
 
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const near = isNearBottom(el);
+      isPinnedToBottomRef.current = near;
+      setShowJumpToLatest(!near);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [isNearBottom]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (isPinnedToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      // New content arrived while user is reading history — keep the pill visible.
+      setShowJumpToLatest(true);
     }
   }, [items]);
+
+  const jumpToLatest = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    isPinnedToBottomRef.current = true;
+    setShowJumpToLatest(false);
+  }, []);
 
   if (loading) {
     return (
@@ -315,6 +366,16 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
           </article>
         );
       })}
+      {showJumpToLatest && (
+        <button
+          type="button"
+          className="chat__jump-to-latest"
+          onClick={jumpToLatest}
+          aria-label="Jump to latest message"
+        >
+          ↓ New messages
+        </button>
+      )}
     </section>
   );
 }

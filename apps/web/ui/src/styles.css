@@ -384,6 +384,31 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   font-size: 12px;
 }
 
+/* Pre-flight gateway readiness probe (SetupScreen). */
+.probe {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.probe ul { margin: 6px 0 0; padding-left: 18px; }
+.probe li { margin: 2px 0; }
+.probe--checking {
+  background: var(--surface-soft);
+  color: var(--text-soft);
+}
+.probe--warn {
+  background: color-mix(in srgb, var(--warning, #c08a3e) 14%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--warning, #c08a3e) 35%, transparent);
+}
+.probe--error {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
 /* ─── Welcome / Setup screen ────────────────────────────────────── */
 
 .welcome-bg {
@@ -527,12 +552,29 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 
 .sidebar__footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.sidebar__footer-actions {
+  display: flex;
+  gap: 6px;
+}
+.sidebar__footer-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.sidebar__footer-displayname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .sidebar__footer-name {
@@ -560,11 +602,13 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 }
 
 .sidebar__footer-uid {
-  margin-left: 4px;
   font-weight: 400;
   font-size: 11px;
   color: var(--muted);
   font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-card {
@@ -725,7 +769,28 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   padding: 16px;
   overflow-y: auto;
   background: var(--bg);
+  position: relative;
 }
+
+.chat__jump-to-latest {
+  position: sticky;
+  bottom: 12px;
+  margin-left: auto;
+  margin-right: 16px;
+  display: block;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 5;
+}
+.chat__jump-to-latest:hover { filter: brightness(1.05); }
 
 /* ─── Messages ──────────────────────────────────────────────────── */
 
@@ -972,12 +1037,27 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-secondary);
-  max-height: 160px;
+  max-height: 360px;
   overflow: auto;
 }
 
 .tool-card__result { background: rgba(0, 0, 0, 0.02); }
 .tool-card--error .tool-card__result { color: var(--danger); }
+
+.tool-card__expand {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: var(--panel-muted);
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+}
+.tool-card__expand:hover { background: var(--accent-soft); }
 
 /* ─── Composer ──────────────────────────────────────────────────── */
 
@@ -2090,6 +2170,13 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 }
 .landing__brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .landing__logo { font-size: 22px; }
+.landing__logo-img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 6px;
+}
 .landing__brand-name { font-family: 'Source Serif 4', serif; font-size: 18px; }
 .landing__nav-links { display: flex; align-items: center; gap: 18px; }
 .landing__nav-links a {

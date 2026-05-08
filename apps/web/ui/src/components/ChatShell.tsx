@@ -70,6 +70,10 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
   const thinkingAsAssistantRef = useRef(false);
   const skipPushRef = useRef(false);
   const pendingSentTexts = useRef<string[]>([]);
+  // Bumped on every loadSession() call. Stale loads check this against
+  // their captured snapshot and bail out before mutating state, so rapid
+  // session-switch clicks can't stomp on each other.
+  const loadTokenRef = useRef(0);
 
   const [pendingComposerText, setPendingComposerText] = useState<string>('');
   const [tourActive, setTourActive] = useState<boolean>(() => !isTourCompleted());
@@ -105,6 +109,8 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
   }, []);
 
   const loadSession = useCallback(async (ws: AgentWsClient, sessionId: string) => {
+    const token = ++loadTokenRef.current;
+    const isStale = () => loadTokenRef.current !== token;
     setCurrentSessionId(sessionId);
     setView('chat');
     setItems([]);
@@ -113,7 +119,9 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
     streamingThinkingRef.current = '';
     thinkingAsAssistantRef.current = false;
     await ws.openSession(sessionId);
+    if (isStale()) return;
     const history: HistoryMessage[] = await ws.getHistory(sessionId);
+    if (isStale()) return;
     const historyItems: ChatItem[] = [];
     let introspectionTools: Extract<ChatItem, { type: 'tool' }>[] | null = null;
     const flushIntrospection = (summary?: string) => {
@@ -185,9 +193,11 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
       if (entry.role === 'assistant' && entry.name) setAgentName(entry.name);
     }
     flushIntrospection();
+    if (isStale()) return;
     setItems(historyItems);
     setLoadingHistory(false);
     const allSessions = await ws.listSessions();
+    if (isStale()) return;
     const sess = allSessions.find(s => s.sessionId === sessionId);
     await ws.subscribe(sessionId, sess?.lastEventId ?? 0);
   }, []);
