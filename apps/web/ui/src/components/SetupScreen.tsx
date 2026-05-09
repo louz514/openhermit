@@ -6,9 +6,11 @@ import {
   importDeviceKey,
   isNewDevice,
   loadGatewayUrl,
+  probeGateway,
   saveGatewayUrl,
   setDisplayName,
   setGateway,
+  type GatewayReadiness,
 } from '../api';
 import { BrandMark } from './Icon';
 
@@ -57,6 +59,17 @@ export function SetupScreen({ onComplete }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [mode, setMode] = useState<'new' | 'restore'>('new');
   const [restoreKey, setRestoreKey] = useState('');
+  // Pre-flight probe state. We hit /api/readiness on the gateway URL once
+  // the user pauses typing so they see misconfigurations (no DATABASE_URL,
+  // ephemeral JWT secret, etc.) BEFORE the auth POST blows up with a
+  // generic 500.
+  const [probe, setProbe] = useState<
+    | { state: 'idle' }
+    | { state: 'checking' }
+    | { state: 'ok'; readiness: GatewayReadiness }
+    | { state: 'warn'; readiness: GatewayReadiness }
+    | { state: 'error'; message: string; readiness?: GatewayReadiness }
+  >({ state: 'idle' });
 
   useEffect(() => {
     (async () => {
@@ -66,6 +79,35 @@ export function SetupScreen({ onComplete }: Props) {
       setLoading(false);
     })();
   }, []);
+
+  // Debounced gateway probe. Skip while the field is empty or obviously
+  // mid-edit (no protocol).
+  useEffect(() => {
+    const url = gatewayUrl.trim();
+    if (!url || !/^https?:\/\//.test(url)) {
+      setProbe({ state: 'idle' });
+      return;
+    }
+    setProbe({ state: 'checking' });
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      const result = await probeGateway(url);
+      if (cancelled) return;
+      if (result.kind === 'unreachable') {
+        setProbe({ state: 'error', message: result.message });
+      } else if (result.kind === 'misconfigured') {
+        setProbe({ state: 'error', readiness: result.readiness, message: result.readiness.hints[0] ?? 'Gateway is not ready.' });
+      } else {
+        // Even when ok, surface non-blocking warnings (ephemeral JWT, no
+        // secrets key) so the operator can fix them between sessions.
+        const hasWarnings = result.readiness.hints.length > 0;
+        setProbe(hasWarnings
+          ? { state: 'warn', readiness: result.readiness }
+          : { state: 'ok', readiness: result.readiness });
+      }
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [gatewayUrl]);
 
   const shortFp = fingerprint
     ? `${fingerprint.slice(0, 8)}...${fingerprint.slice(-8)}`
@@ -191,6 +233,32 @@ export function SetupScreen({ onComplete }: Props) {
             The OpenHermit gateway. Default for local dev: <code>http://localhost:4000</code>.
           </span>
         </label>
+
+        {probe.state === 'checking' && (
+          <p className="probe probe--checking">Checking gateway…</p>
+        )}
+        {probe.state === 'error' && (
+          <div className="probe probe--error">
+            <strong>Gateway not ready.</strong> {probe.message}
+            {probe.readiness && probe.readiness.hints.length > 1 && (
+              <ul>
+                {probe.readiness.hints.slice(1).map((h) => (
+                  <li key={h}>{h}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {probe.state === 'warn' && (
+          <div className="probe probe--warn">
+            <strong>Gateway reachable.</strong> A few things to fix when convenient:
+            <ul>
+              {probe.readiness.hints.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {error && <p className="form-error">{error}</p>}
 
