@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openhermit
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: openhermit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openhermit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://openhermit:dev@localhost:5432/openhermit_test
+      DATABASE_URL_TEST: postgresql://openhermit:dev@localhost:5432/openhermit_test
+      GATEWAY_ADMIN_TOKEN: ci-admin-token
+      GATEWAY_JWT_SECRET: ci-jwt-secret-please-rotate-32-chars
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # Seed any setup the test runner expects (init-test-db.sql is
+      # safe to run more than once because it uses IF NOT EXISTS).
+      - name: Init test DB
+        run: |
+          PGPASSWORD=dev psql -h localhost -U openhermit -d openhermit_test \
+            -f scripts/init-test-db.sql || true
+      - run: npm test
+
+  smoke:
+    name: Web smoke test
+    runs-on: ubuntu-latest
+    needs: typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build web UI
+        run: npm run build:ui --workspace=@openhermit/web
+      - name: Serve built UI
+        run: npx --yes http-server apps/web/public -p 5173 -s &
+      - name: Wait for server
+        run: npx --yes wait-on http://localhost:5173 -t 30000
+      - name: Run smoke test
+        run: node scripts/smoke-test.mjs --url=http://localhost:5173/

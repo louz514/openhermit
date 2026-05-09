@@ -9,4 +9,8 @@ dist/
 .DS_Store
 TODO.md
 apps/cli/public/
+# Built web bundles — produced by `npm run build`. Don't track build output.
+apps/web/public/assets/
+apps/web/public/index.html
+apps/web/public/logo.png
 pnpm-lock.yaml

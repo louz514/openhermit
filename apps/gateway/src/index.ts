@@ -194,6 +194,25 @@ export const main = async (): Promise<void> => {
   }
   const adminToken = process.env.GATEWAY_ADMIN_TOKEN;
 
+  // Hard-fail in production if the operator left the dev defaults in place.
+  // These tokens ship in the README / .env.example, so leaving them in a
+  // public deployment is a credential leak in disguise.
+  if (process.env.NODE_ENV === 'production') {
+    const fatals: string[] = [];
+    if (!process.env.GATEWAY_JWT_SECRET) {
+      fatals.push('GATEWAY_JWT_SECRET is required in production');
+    } else if (/dev-jwt-secret|change-me|please-rotate/i.test(process.env.GATEWAY_JWT_SECRET)) {
+      fatals.push('GATEWAY_JWT_SECRET is still the development default — rotate it');
+    }
+    if (adminToken && /dev-admin-token|change-me/i.test(adminToken)) {
+      fatals.push('GATEWAY_ADMIN_TOKEN is still the development default — rotate it');
+    }
+    if (fatals.length > 0) {
+      for (const msg of fatals) logStartup(`fatal: ${msg}`);
+      throw new Error(`refusing to start in production with insecure defaults: ${fatals.join('; ')}`);
+    }
+  }
+
   const auth: AuthResolverOptions = {
     userProviders: [new DeviceKeyAuthProvider()],
     channels,

@@ -663,6 +663,13 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     c.json({ ok: true, role: 'gateway' }),
   );
 
+  // Conventional alias under /api so reverse proxies that only forward
+  // /api/* (and uptime monitors that default to /api/health) get a 200.
+  // Liveness only — does not touch the database or agent runtime.
+  app.get('/api/health', (c) =>
+    c.json({ ok: true, role: 'gateway' }),
+  );
+
   /**
    * Public readiness probe used by the web setup wizard. Reports which
    * core subsystems are configured so we can show users a precise list of

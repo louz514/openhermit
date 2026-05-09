@@ -88,27 +88,42 @@ npm install
 
 ## Quick Start
 
+OpenHermit needs four things before it does anything useful:
+
+| Prereq | Why | How |
+|---|---|---|
+| **PostgreSQL** | All durable state — sessions, memories, secrets, skills, schedules. | `docker compose up -d postgres` (uses [docker-compose.yml](docker-compose.yml)) or any Postgres 14+. |
+| **`GATEWAY_JWT_SECRET`** | Signs login tokens. Without it, every restart logs everyone out. | A random 32+ char string. The gateway will refuse to start in `NODE_ENV=production` if this is unset or left at the dev default. |
+| **`OPENHERMIT_SECRETS_KEY`** | Encrypts API keys at rest in Postgres. Without it, secrets fall back to plaintext on disk. | A random 32-byte key. `hermit setup` generates one for you. |
+| **A model API key** | The agent needs something to talk to. | An `OPENROUTER_API_KEY` (or `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) stored per-agent via `hermit config secrets set`. |
+
+Once those are in place:
+
 ```bash
-# Configure DATABASE_URL, GATEWAY_ADMIN_TOKEN, GATEWAY_JWT_SECRET.
+# 1. Initialize ~/.openhermit/gateway/.env interactively (or copy .env.example).
 hermit setup
 
-# Start the gateway and the end-user web app.
+# 2. Start the gateway (admin UI at http://127.0.0.1:4000/admin/) and the
+#    end-user web app (http://127.0.0.1:4310).
 hermit gateway start
 hermit web start
 
-# Check platform health.
+# 3. Verify the platform is healthy. `doctor` reports any missing config.
 hermit status
 hermit doctor
+curl http://127.0.0.1:4000/api/health     # liveness (uptime monitors)
+curl http://127.0.0.1:4000/api/readiness  # configuration probe
 
-# Create and start an agent.
+# 4. Create an agent and give it a model key.
 hermit agents create main
+hermit config secrets set OPENROUTER_API_KEY sk-or-... --agent main
 hermit agents start main
 
-# Chat through the CLI.
+# 5. Talk to it.
 hermit chat --agent main
 ```
 
-The gateway defaults to `http://127.0.0.1:4000` and serves the admin UI at `/admin/`. The end-user web app runs on `http://127.0.0.1:4310`.
+If you're running locally for development, the dev defaults in `.env.example` (`dev-jwt-secret-…`, `dev-admin-token`) work fine. Don't ship them.
 
 ---
 
