@@ -271,6 +271,11 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
     setShowJumpToLatest(false);
   }, []);
 
+  // Hooks must run unconditionally — keep this above the early returns
+  // below or React will throw "Rendered more hooks than during the
+  // previous render" the moment loading flips to false / items arrives.
+  const turns = useMemo(() => groupIntoTurns(items), [items]);
+
   if (loading) {
     return (
       <section className="chat__messages" ref={containerRef}>
@@ -287,8 +292,6 @@ export function ChatMessages({ items, agentName, loading, onApproval, emptyState
       </section>
     );
   }
-
-  const turns = useMemo(() => groupIntoTurns(items), [items]);
 
   return (
     <section className="chat__messages" ref={containerRef}>

@@ -14,27 +14,34 @@ import {
 } from './api';
 import { PickAgentScreen } from './components/PickAgentScreen';
 import { SetupScreen } from './components/SetupScreen';
-import { LandingScreen } from './components/LandingScreen';
+// LandingScreen is static marketing content — lazy-load so returning
+// users on Setup/PickAgent/Chat don't pay for it.
+const LandingScreen = lazy(() =>
+  import('./components/LandingScreen').then((m) => ({ default: m.LandingScreen })),
+);
 // ChatShell pulls in the markdown + KaTeX stack — keep it out of the
 // initial bundle for users still on Setup/PickAgent.
 const ChatShell = lazy(() => import('./components/ChatShell').then((m) => ({ default: m.ChatShell })));
 import { ToastProvider } from './components/Toast';
-import { ErrorBoundary } from './components/ErrorBoundary';
 import { useTheme } from './components/ThemeToggle';
 
-type Screen = 'loading' | 'landing' | 'setup' | 'pick-agent' | 'chat';
+type Screen = 'landing' | 'setup' | 'pick-agent' | 'chat';
 
 export function App() {
   // Initialize theme on mount.
   useTheme();
 
-  const [screen, setScreen] = useState<Screen>('loading');
+  // Render landing immediately so first paint isn't blocked by JWT
+  // refresh. The async effect below upgrades `resumeTarget` (and the CTA
+  // label) once we know whether the visitor can resume chat / agents.
+  const [screen, setScreen] = useState<Screen>('landing');
   const [connection, setConn] = useState<Connection | null>(null);
   const [gatewayUrl, setGatewayUrl] = useState<string>('');
   // Where the landing-page CTA should send the user.
-  const [resumeTarget, setResumeTarget] = useState<Exclude<Screen, 'landing' | 'loading'>>('setup');
+  const [resumeTarget, setResumeTarget] = useState<Exclude<Screen, 'landing'>>('setup');
 
   useEffect(() => {
+    let cancelled = false;
     initJwt();
 
     const displayName = getDisplayName();
@@ -42,8 +49,6 @@ export function App() {
 
     // First-time visitor: nothing to resume — landing → setup.
     if (!displayName || !savedGateway) {
-      setResumeTarget('setup');
-      setScreen('landing');
       return;
     }
     setGateway(savedGateway);
@@ -56,26 +61,26 @@ export function App() {
       try {
         await exchangeToken(displayName);
       } catch {
-        setResumeTarget('setup');
-        setScreen('landing');
         return;
       }
+      if (cancelled) return;
 
       const saved = loadConnection();
       if (saved?.agentId) {
         let role = saved.role;
         try {
           const memberships = await listMyAgents();
+          if (cancelled) return;
           const m = memberships.find((x) => x.agentId === saved.agentId);
           if (!m) {
             setResumeTarget('pick-agent');
-            setScreen('landing');
             return;
           }
           role = m.role;
         } catch {
           // fall through with stored role
         }
+        if (cancelled) return;
         const fresh: Connection = { ...saved, ...(role ? { role } : {}) };
         setConn(fresh);
         setConnection(fresh);
@@ -84,17 +89,11 @@ export function App() {
       } else {
         setResumeTarget('pick-agent');
       }
-      // If the user landed deep-linked on a /chat/* URL and we already
-      // have a usable connection, skip the landing flash and jump
-      // straight to the chat. Otherwise fall back to the landing page so
-      // returning visitors can choose where to go next.
-      const onChatRoute = window.location.pathname.startsWith('/chat');
-      if (onChatRoute && saved?.agentId) {
-        setScreen('chat');
-      } else {
-        setScreen('landing');
-      }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSetupComplete = (): void => {
@@ -124,15 +123,15 @@ export function App() {
     setScreen('landing');
   };
 
-  if (screen === 'loading') return null;
-
   if (screen === 'landing') {
     return (
       <ToastProvider>
-        <LandingScreen
-          resumeTarget={resumeTarget}
-          onGetStarted={() => setScreen(resumeTarget)}
-        />
+        <Suspense fallback={null}>
+          <LandingScreen
+            resumeTarget={resumeTarget}
+            onGetStarted={() => setScreen(resumeTarget)}
+          />
+        </Suspense>
       </ToastProvider>
     );
   }
@@ -159,16 +158,14 @@ export function App() {
 
   return (
     <ToastProvider>
-      <ErrorBoundary label="App">
-        <Suspense fallback={null}>
-          <ChatShell
-            connection={connection!}
-            role={connection?.role ?? null}
-            onDisconnect={handleDisconnect}
-            onGoHome={() => setScreen('landing')}
-          />
-        </Suspense>
-      </ErrorBoundary>
+      <Suspense fallback={null}>
+        <ChatShell
+          connection={connection!}
+          role={connection?.role ?? null}
+          onDisconnect={handleDisconnect}
+          onGoHome={() => setScreen('landing')}
+        />
+      </Suspense>
     </ToastProvider>
   );
 }

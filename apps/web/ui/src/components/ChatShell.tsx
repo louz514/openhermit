@@ -592,7 +592,7 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
               }
             }}
           >
-            <img src="/logo.png" alt="" className="sidebar__logo" />
+            <img src="/logo.png" alt="" className="sidebar__logo" width={28} height={28} />
             <div>
               <h1 className="sidebar__brand-name">OpenHermit</h1>
               <p className="sidebar__meta">Agent: {agentName || connection.agentId}</p>

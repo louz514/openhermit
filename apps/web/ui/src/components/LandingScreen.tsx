@@ -1,5 +1,5 @@
 import { ThemeToggle } from './ThemeToggle';
-import { Icon, BrandMark, type IconName } from './Icon';
+import { Icon, type IconName } from './Icon';
 
 interface Props {
   onGetStarted: () => void;
@@ -70,7 +70,7 @@ export function LandingScreen({ onGetStarted, resumeTarget = 'setup' }: Props) {
     <div className="landing">
       <header className="landing__nav">
         <div className="landing__brand">
-          <span className="landing__logo"><BrandMark size={26} /></span>
+          <img src="/logo.png" alt="OpenHermit logo" className="landing__logo-img" width={32} height={32} />
           <span className="landing__brand-name">OpenHermit</span>
         </div>
         <nav className="landing__nav-links">
