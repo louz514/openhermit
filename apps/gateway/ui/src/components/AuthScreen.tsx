@@ -22,21 +22,36 @@ export function AuthScreen({ onSignIn }: { onSignIn: (token: string) => Promise<
     <div className="auth-screen">
       <form className="auth-form" onSubmit={handleSubmit}>
         <p className="eyebrow">OpenHermit</p>
-        <h1>Gateway Admin</h1>
+        <h1>Welcome</h1>
+        <p className="auth-form__intro">
+          Sign in to manage your agents, channels, skills, and more.
+        </p>
         <label className="field">
-          <span className="field__label">Admin Token</span>
+          <span className="field__label">Admin token</span>
           <input
             className="field__input"
             type="password"
-            placeholder="Enter admin token"
+            placeholder="paste your admin token"
             required
+            autoFocus
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
         </label>
+        <p className="auth-form__hint">
+          This is the value of <code>GATEWAY_ADMIN_TOKEN</code> from your
+          gateway's <code>.env</code> file. New here?{' '}
+          <a
+            href="https://github.com/HCF-S/openhermit#quick-start"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Quick-start guide
+          </a>.
+        </p>
         {error && <p className="auth-form__error">{error}</p>}
         <button className="btn btn--primary" type="submit" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
+          {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </div>

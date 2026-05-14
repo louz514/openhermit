@@ -182,7 +182,24 @@ export function FleetPanel() {
       {!loading && error && <p className="agent-list__empty">{error}</p>}
 
       {!loading && !error && fleet.length === 0 && (
-        <p className="agent-list__empty">No agents yet. Create one to get started.</p>
+        <div className="empty-state">
+          <div className="empty-state__icon" aria-hidden="true">✦</div>
+          <h3 className="empty-state__title">Let's create your first agent</h3>
+          <p className="empty-state__body">
+            An <strong>agent</strong> is your AI worker. Give it a name, pick a
+            sandbox, and you'll be chatting with it in seconds. Most setups
+            start with a single agent named <code>main</code>.
+          </p>
+          <div className="empty-state__actions">
+            <button className="btn btn--primary" onClick={() => setShowCreate(true)}>
+              Create your first agent
+            </button>
+          </div>
+          <p className="empty-state__hint">
+            Not sure where to start? Click <kbd>?</kbd> in the top right for a
+            guided tour of every section.
+          </p>
+        </div>
       )}
 
       {fleet.length > 0 && (
