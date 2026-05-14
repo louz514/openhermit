@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Tab } from '../router';
+import { ThemeToggle } from './ThemeToggle';
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'fleet', label: 'Agents' },
@@ -18,10 +19,12 @@ export function Topbar({
   tab,
   onTabChange,
   onSignOut,
+  onOpenTour,
 }: {
   tab: Tab;
   onTabChange: (tab: Tab) => void;
   onSignOut: () => void;
+  onOpenTour: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -74,14 +77,28 @@ export function Topbar({
             {t.label}
           </button>
         ))}
+        <button className="btn btn--ghost btn--sm topbar__signout" onClick={() => { setMenuOpen(false); onOpenTour(); }}>
+          Tour
+        </button>
         <button className="btn btn--ghost btn--sm topbar__signout" onClick={() => { setMenuOpen(false); onSignOut(); }}>
           Sign Out
         </button>
       </div>
 
-      <button className="btn btn--ghost btn--sm topbar__signout-desktop" onClick={onSignOut}>
-        Sign Out
-      </button>
+      <div className="topbar__actions">
+        <ThemeToggle />
+        <button
+          className="btn btn--ghost btn--sm"
+          onClick={onOpenTour}
+          title="Open the OpenHermit walkthrough"
+          aria-label="Open walkthrough"
+        >
+          ?
+        </button>
+        <button className="btn btn--ghost btn--sm topbar__signout-desktop" onClick={onSignOut}>
+          Sign Out
+        </button>
+      </div>
     </nav>
   );
 }

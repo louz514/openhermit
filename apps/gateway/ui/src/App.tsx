@@ -13,11 +13,13 @@ import { UsersPanel } from './components/UsersPanel';
 import { StatsPanel } from './components/StatsPanel';
 import { LogsPanel } from './components/LogsPanel';
 import { GatewayConfigPanel } from './components/GatewayConfigPanel';
+import { Walkthrough, walkthroughStorage } from './components/Walkthrough';
 
 export function App() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useTabRouter();
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     if (!getToken()) {
@@ -29,6 +31,13 @@ export function App() {
       .catch(() => setToken(''))
       .finally(() => setChecking(false));
   }, []);
+
+  // Auto-open the tour the first time an authed user lands on the admin UI.
+  useEffect(() => {
+    if (authed && !walkthroughStorage.isDismissed()) {
+      setTourOpen(true);
+    }
+  }, [authed]);
 
   const handleSignIn = async (t: string) => {
     setToken(t);
@@ -49,7 +58,12 @@ export function App() {
 
   return (
     <div className="shell">
-      <Topbar tab={tab} onTabChange={setTab} onSignOut={handleSignOut} />
+      <Topbar
+        tab={tab}
+        onTabChange={setTab}
+        onSignOut={handleSignOut}
+        onOpenTour={() => setTourOpen(true)}
+      />
       {tab === 'fleet' && <FleetPanel />}
       {tab === 'skills' && <SkillsPanel />}
       {tab === 'mcp-servers' && <McpServersPanel />}
@@ -60,6 +74,14 @@ export function App() {
       {tab === 'stats' && <StatsPanel />}
       {tab === 'logs' && <LogsPanel />}
       {tab === 'config' && <GatewayConfigPanel />}
+      <Walkthrough
+        open={tourOpen}
+        onClose={(opts) => {
+          if (opts?.dontShowAgain) walkthroughStorage.setDismissed(true);
+          setTourOpen(false);
+        }}
+        onTabChange={setTab}
+      />
     </div>
   );
 }
