@@ -1756,7 +1756,11 @@ export class AgentRunner implements SessionRuntime {
   private async refreshAgentConfiguration(session: RunnerSession): Promise<void> {
     await this.options.security.load();
     const config = await this.options.security.readConfig();
-    this.ensureProviderApiKey(config.model.provider);
+    // When streamFn is injected (tests, proxied setups), the runner does
+    // not call out to the provider directly, so skip the API key gate.
+    if (!this.options.streamFn) {
+      this.ensureProviderApiKey(config.model.provider);
+    }
 
     const isOwnerInteractive = session.spec.source.interactive && session.resolvedUserRole === 'owner';
     const approvalCallback = isOwnerInteractive

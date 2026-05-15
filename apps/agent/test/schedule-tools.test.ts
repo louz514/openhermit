@@ -149,7 +149,7 @@ test('schedule_create does NOT pass sessionMode', async (t) => {
   let capturedInput: Record<string, unknown> = {};
   const { tools } = await setupContext(t, {
     create: async (_scope, input) => {
-      capturedInput = input as Record<string, unknown>;
+      capturedInput = input as unknown as Record<string, unknown>;
       return makeRecord();
     },
   });
@@ -162,7 +162,7 @@ test('schedule_create with delivery config passes through correctly', async (t) 
   let capturedInput: Record<string, unknown> = {};
   const { tools } = await setupContext(t, {
     create: async (_scope, input) => {
-      capturedInput = input as Record<string, unknown>;
+      capturedInput = input as unknown as Record<string, unknown>;
       return makeRecord({ delivery: { kind: 'session', sessionId: 'sess-abc' } });
     },
   });

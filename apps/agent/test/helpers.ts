@@ -127,6 +127,8 @@ export const createSecurityFixture = async (
     secrets?: SecretsMap;
     /** Override fields in the seeded security policy. */
     security?: Partial<SecurityPolicy>;
+    /** Override fields in the seeded agent config (deep-merged at top level). */
+    config?: Record<string, unknown>;
     /** Skip seeding default config (for tests that want a missing-config error). */
     skipConfig?: boolean;
   },
@@ -138,10 +140,11 @@ export const createSecurityFixture = async (
 
   // Seed the default config + security policy unless test opts out.
   if (!options?.skipConfig) {
-    await configStore.setConfig(
-      workspaceFixture.agentId,
-      buildDefaultAgentConfig(workspaceFixture.root) as unknown as Record<string, unknown>,
-    );
+    const defaults = buildDefaultAgentConfig(workspaceFixture.root) as unknown as Record<string, unknown>;
+    const merged = options?.config
+      ? { ...defaults, ...options.config }
+      : defaults;
+    await configStore.setConfig(workspaceFixture.agentId, merged);
   }
   await configStore.setSecurity(workspaceFixture.agentId, {
     ...DEFAULT_SECURITY_POLICY,

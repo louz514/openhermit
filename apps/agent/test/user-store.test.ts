@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { DbInternalStateStore } from '@openhermit/store';
-import type { StoreScope, UserStore } from '@openhermit/store';
 
 async function createTestStore(t: import('node:test').TestContext) {
   const store = await DbInternalStateStore.open();
@@ -11,205 +10,200 @@ async function createTestStore(t: import('node:test').TestContext) {
   return store;
 }
 
-function uniqueScope(): StoreScope {
-  return { agentId: `test-user-${randomUUID().slice(0, 8)}` };
-}
+const uniqueUserId = (): string => `usr-${randomUUID().slice(0, 8)}`;
+const uniqueAgentId = (): string => `agent-test-${randomUUID().slice(0, 8)}`;
+const uniqueChannelId = (): string => randomUUID().slice(0, 8);
 
 test('UserStore: upsert and get a user', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
   const now = new Date().toISOString();
-  await users.upsert(scope, {
-    userId: 'usr-001',
-    role: 'owner',
+
+  await users.upsert({
+    userId,
     name: 'Alice',
     createdAt: now,
     updatedAt: now,
   });
 
-  const user = await users.get(scope, 'usr-001');
+  const user = await users.get(userId);
   assert.ok(user);
-  assert.equal(user.userId, 'usr-001');
-  assert.equal(user.role, 'owner');
+  assert.equal(user.userId, userId);
   assert.equal(user.name, 'Alice');
 });
 
 test('UserStore: upsert updates existing user', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
   const now = new Date().toISOString();
-  await users.upsert(scope, {
-    userId: 'usr-001',
-    role: 'guest',
-    createdAt: now,
-    updatedAt: now,
-  });
 
-  const later = new Date().toISOString();
-  await users.upsert(scope, {
-    userId: 'usr-001',
-    role: 'user',
-    name: 'Bob',
-    createdAt: now,
-    updatedAt: later,
-  });
+  await users.upsert({ userId, createdAt: now, updatedAt: now });
 
-  const user = await users.get(scope, 'usr-001');
+  const later = new Date(Date.now() + 1000).toISOString();
+  await users.upsert({ userId, name: 'Bob', createdAt: now, updatedAt: later });
+
+  const user = await users.get(userId);
   assert.ok(user);
-  assert.equal(user.role, 'user');
   assert.equal(user.name, 'Bob');
+  assert.equal(user.updatedAt, later);
 });
 
 test('UserStore: list excludes merged users', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const a = uniqueUserId();
+  const b = uniqueUserId();
+  const c = uniqueUserId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.upsert(scope, { userId: 'usr-002', role: 'guest', createdAt: now, updatedAt: now });
-  await users.upsert(scope, { userId: 'usr-003', role: 'user', mergedInto: 'usr-001', createdAt: now, updatedAt: now });
 
-  const list = await users.list(scope);
-  assert.equal(list.length, 2);
-  assert.ok(list.find((u) => u.userId === 'usr-001'));
-  assert.ok(list.find((u) => u.userId === 'usr-002'));
-  assert.ok(!list.find((u) => u.userId === 'usr-003'));
+  await users.upsert({ userId: a, createdAt: now, updatedAt: now });
+  await users.upsert({ userId: b, createdAt: now, updatedAt: now });
+  await users.upsert({ userId: c, mergedInto: a, createdAt: now, updatedAt: now });
+
+  const list = await users.list();
+  const ids = list.map((u) => u.userId);
+  assert.ok(ids.includes(a));
+  assert.ok(ids.includes(b));
+  assert.ok(!ids.includes(c));
 });
 
 test('UserStore: link and resolve identity', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
+  const channelUserId = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, {
-    userId: 'usr-001',
+
+  await users.upsert({ userId, createdAt: now, updatedAt: now });
+  await users.linkIdentity({
+    userId,
     channel: 'telegram',
-    channelUserId: '12345',
+    channelUserId,
     createdAt: now,
   });
 
-  const resolved = await users.resolve(scope, 'telegram', '12345');
-  assert.equal(resolved, 'usr-001');
+  const resolved = await users.resolve('telegram', channelUserId);
+  assert.equal(resolved, userId);
 
-  // Unknown identity returns undefined
-  const unknown = await users.resolve(scope, 'telegram', '99999');
+  const unknown = await users.resolve('telegram', uniqueChannelId());
   assert.equal(unknown, undefined);
 });
 
 test('UserStore: resolve follows merged_into', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const a = uniqueUserId();
+  const b = uniqueUserId();
+  const channelUserId = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.upsert(scope, { userId: 'usr-002', role: 'guest', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-002', channel: 'telegram', channelUserId: '12345', createdAt: now });
 
-  // Merge usr-002 into usr-001
-  await users.merge(scope, 'usr-002', 'usr-001');
+  await users.upsert({ userId: a, createdAt: now, updatedAt: now });
+  await users.upsert({ userId: b, createdAt: now, updatedAt: now });
+  await users.linkIdentity({ userId: b, channel: 'telegram', channelUserId, createdAt: now });
 
-  // Identity should now resolve to usr-001
-  const resolved = await users.resolve(scope, 'telegram', '12345');
-  assert.equal(resolved, 'usr-001');
+  await users.merge(b, a);
+
+  const resolved = await users.resolve('telegram', channelUserId);
+  assert.equal(resolved, a);
 });
 
 test('UserStore: merge re-links identities', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const a = uniqueUserId();
+  const b = uniqueUserId();
+  const tg = uniqueChannelId();
+  const dc = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.upsert(scope, { userId: 'usr-002', role: 'guest', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-002', channel: 'telegram', channelUserId: '111', createdAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-002', channel: 'discord', channelUserId: '222', createdAt: now });
 
-  await users.merge(scope, 'usr-002', 'usr-001');
+  await users.upsert({ userId: a, createdAt: now, updatedAt: now });
+  await users.upsert({ userId: b, createdAt: now, updatedAt: now });
+  await users.linkIdentity({ userId: b, channel: 'telegram', channelUserId: tg, createdAt: now });
+  await users.linkIdentity({ userId: b, channel: 'discord', channelUserId: dc, createdAt: now });
 
-  // All identities should be on usr-001
-  const identities = await users.listIdentities(scope, 'usr-001');
-  assert.equal(identities.length, 2);
-  assert.ok(identities.find((i) => i.channel === 'telegram' && i.channelUserId === '111'));
-  assert.ok(identities.find((i) => i.channel === 'discord' && i.channelUserId === '222'));
+  await users.merge(b, a);
 
-  // usr-002 should have no identities
-  const oldIdentities = await users.listIdentities(scope, 'usr-002');
+  const identities = await users.listIdentities(a);
+  assert.ok(identities.find((i) => i.channel === 'telegram' && i.channelUserId === tg));
+  assert.ok(identities.find((i) => i.channel === 'discord' && i.channelUserId === dc));
+
+  const oldIdentities = await users.listIdentities(b);
   assert.equal(oldIdentities.length, 0);
 });
 
 test('UserStore: unlink identity', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
+  const channelUserId = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-001', channel: 'telegram', channelUserId: '12345', createdAt: now });
 
-  await users.unlinkIdentity(scope, 'telegram', '12345');
+  await users.upsert({ userId, createdAt: now, updatedAt: now });
+  await users.linkIdentity({ userId, channel: 'telegram', channelUserId, createdAt: now });
 
-  const resolved = await users.resolve(scope, 'telegram', '12345');
+  await users.unlinkIdentity('telegram', channelUserId);
+
+  const resolved = await users.resolve('telegram', channelUserId);
   assert.equal(resolved, undefined);
 });
 
 test('UserStore: delete cascades identities', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
+  const channelUserId = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-001', channel: 'telegram', channelUserId: '12345', createdAt: now });
 
-  await users.delete(scope, 'usr-001');
+  await users.upsert({ userId, createdAt: now, updatedAt: now });
+  await users.linkIdentity({ userId, channel: 'telegram', channelUserId, createdAt: now });
 
-  const user = await users.get(scope, 'usr-001');
+  await users.delete(userId);
+
+  const user = await users.get(userId);
   assert.equal(user, undefined);
 
-  const resolved = await users.resolve(scope, 'telegram', '12345');
+  const resolved = await users.resolve('telegram', channelUserId);
   assert.equal(resolved, undefined);
 });
 
 test('UserStore: linkIdentity re-links existing identity to new user', async (t) => {
   const store = await createTestStore(t);
-  const scope = uniqueScope();
   const users = store.users;
-
+  const a = uniqueUserId();
+  const b = uniqueUserId();
+  const channelUserId = uniqueChannelId();
   const now = new Date().toISOString();
-  await users.upsert(scope, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.upsert(scope, { userId: 'usr-002', role: 'guest', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope, { userId: 'usr-002', channel: 'telegram', channelUserId: '12345', createdAt: now });
 
-  // Re-link to usr-001
-  await users.linkIdentity(scope, { userId: 'usr-001', channel: 'telegram', channelUserId: '12345', createdAt: now });
+  await users.upsert({ userId: a, createdAt: now, updatedAt: now });
+  await users.upsert({ userId: b, createdAt: now, updatedAt: now });
+  await users.linkIdentity({ userId: b, channel: 'telegram', channelUserId, createdAt: now });
 
-  const resolved = await users.resolve(scope, 'telegram', '12345');
-  assert.equal(resolved, 'usr-001');
+  await users.linkIdentity({ userId: a, channel: 'telegram', channelUserId, createdAt: now });
+
+  const resolved = await users.resolve('telegram', channelUserId);
+  assert.equal(resolved, a);
 });
 
-test('UserStore: scope isolation between agents', async (t) => {
+test('UserStore: assignAgent grants per-agent role and isolates between agents', async (t) => {
   const store = await createTestStore(t);
-  const scope1 = uniqueScope();
-  const scope2 = uniqueScope();
   const users = store.users;
-
+  const userId = uniqueUserId();
+  const agent1 = uniqueAgentId();
+  const agent2 = uniqueAgentId();
   const now = new Date().toISOString();
 
-  await users.upsert(scope1, { userId: 'usr-001', role: 'owner', createdAt: now, updatedAt: now });
-  await users.linkIdentity(scope1, { userId: 'usr-001', channel: 'cli', channelUserId: 'alice', createdAt: now });
+  await users.upsert({ userId, createdAt: now, updatedAt: now });
+  await users.assignAgent({ agentId: agent1 }, userId, 'owner', now);
 
-  // Agent 2 should not see agent 1's user
-  const user = await users.get(scope2, 'usr-001');
-  assert.equal(user, undefined);
+  // Role exists on agent1, not on agent2.
+  assert.equal(await users.getAgentRole({ agentId: agent1 }, userId), 'owner');
+  assert.equal(await users.getAgentRole({ agentId: agent2 }, userId), undefined);
 
-  const resolved = await users.resolve(scope2, 'cli', 'alice');
-  assert.equal(resolved, undefined);
+  // listByAgent reflects only members of that agent.
+  const agent1Members = await users.listByAgent({ agentId: agent1 });
+  assert.ok(agent1Members.find((m) => m.userId === userId && m.role === 'owner'));
+  const agent2Members = await users.listByAgent({ agentId: agent2 });
+  assert.ok(!agent2Members.find((m) => m.userId === userId));
 });
