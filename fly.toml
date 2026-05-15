@@ -1,0 +1,54 @@
+# Fly.io configuration for the OpenHermit backend (gateway + agent runtime).
+# The web UI deploys separately to Vercel and talks to this app via HTTPS.
+#
+# First-time setup:
+#   fly launch --no-deploy --copy-config
+#   fly volumes create openhermit_data --size 3 --region <region>
+#   fly secrets set \
+#     DATABASE_URL='postgres://USER:PASSWORD@HOST/DBNAME?sslmode=require' \
+#     OPENHERMIT_SECRETS_KEY="$(openssl rand -base64 32)" \
+#     GATEWAY_ADMIN_TOKEN="$(openssl rand -hex 32)"
+#   fly deploy
+
+app = "openhermit-backend"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  GATEWAY_HOST = "0.0.0.0"
+  GATEWAY_PORT = "4000"
+  OPENHERMIT_HOME = "/data"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[mounts]]
+  source = "openhermit_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpus = 1
+
+[checks.health]
+  type = "http"
+  port = 4000
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "30s"
+  method = "get"
+  path = "/health"
