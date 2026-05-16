@@ -858,6 +858,16 @@ export const putAgentConfig = (config: AgentConfig) => apiFetch<{ ok: boolean }>
 export interface ProviderCatalogEntry { provider: string; models: { id: string; reasoning: boolean }[] }
 export const fetchProviderCatalog = () => apiFetchGlobal<ProviderCatalogEntry[]>('/api/providers');
 
+// Security policy — access level + access token for self-join.
+export interface AgentSecurityPolicy {
+  access?: 'public' | 'protected' | 'private';
+  access_token?: string;
+  [key: string]: unknown;
+}
+export const fetchAgentSecurity = () => apiFetch<AgentSecurityPolicy>('/security');
+export const putAgentSecurity = (policy: AgentSecurityPolicy) =>
+  apiFetch<{ ok: boolean }>('/security', { method: 'PUT', body: policy });
+
 // Policies
 export interface PolicyInfo {
   id: string;

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchPolicies, upsertPolicy, deletePolicy, type PolicyInfo } from '../api';
+import {
+  fetchPolicies,
+  upsertPolicy,
+  deletePolicy,
+  fetchAgentSecurity,
+  putAgentSecurity,
+  type PolicyInfo,
+  type AgentSecurityPolicy,
+} from '../api';
 import { useToast } from './Toast';
 
 const GRANT_PRESETS: { label: string; grants: Array<{ type: 'any' | 'role'; value?: string }> }[] = [
@@ -59,6 +67,8 @@ export function PoliciesPanel() {
 
   return (
     <div className="policies-panel">
+      <SharingSection />
+
       <div className="policies-panel__intro">
         <p className="eyebrow">Access Policies</p>
         <p className="policies-panel__hint">
@@ -278,5 +288,138 @@ function CreatePolicyDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+// Generate a URL-safe random token using the Web Crypto API.
+function randomToken(bytes = 24): string {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  let binary = '';
+  for (const b of arr) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function SharingSection() {
+  const { toast } = useToast();
+  const [policy, setPolicy] = useState<AgentSecurityPolicy | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setPolicy(await fetchAgentSecurity());
+      setError('');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const save = async (patch: Partial<AgentSecurityPolicy>) => {
+    if (!policy) return;
+    const next = { ...policy, ...patch };
+    setSaving(true);
+    try {
+      await putAgentSecurity(next);
+      setPolicy(next);
+      toast('Sharing settings updated', 'success');
+    } catch (err) {
+      const msg = (err as Error).message;
+      setError(msg);
+      toast(`Failed to update: ${msg}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAccessChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    void save({ access: e.target.value as AgentSecurityPolicy['access'] });
+  };
+
+  const handleGenerate = () => {
+    void save({ access_token: randomToken() });
+  };
+
+  const handleClearToken = () => {
+    if (!window.confirm('Clear the share token? Anyone who already has it will no longer be able to join.')) return;
+    void save({ access_token: '' });
+  };
+
+  const handleCopy = async () => {
+    if (!policy?.access_token) return;
+    try {
+      await navigator.clipboard.writeText(policy.access_token);
+      toast('Token copied to clipboard', 'success');
+    } catch {
+      toast('Copy failed — select the token and copy manually', 'error');
+    }
+  };
+
+  if (loading) return <p className="manage__empty">Loading sharing…</p>;
+  if (!policy) return null;
+
+  const access = policy.access ?? 'public';
+  const token = policy.access_token ?? '';
+
+  return (
+    <div className="policies-panel__intro" style={{ marginBottom: 16 }}>
+      <p className="eyebrow">Sharing</p>
+      <p className="policies-panel__hint">
+        Controls who can chat with this agent.{' '}
+        <strong>Public</strong> auto-creates guest members on first contact.{' '}
+        <strong>Protected</strong> requires the share token below.{' '}
+        <strong>Private</strong> only allows members you add explicitly.
+      </p>
+
+      <div className="basic-panel__field" style={{ marginTop: 8 }}>
+        <label>Access level</label>
+        <select value={access} onChange={handleAccessChange} disabled={saving}>
+          <option value="public">Public — anyone can chat</option>
+          <option value="protected">Protected — share token required</option>
+          <option value="private">Private — owner-added members only</option>
+        </select>
+      </div>
+
+      {access === 'protected' && (
+        <div className="basic-panel__field" style={{ marginTop: 8 }}>
+          <label>Share token</label>
+          {token ? (
+            <>
+              <div className="basic-panel__custom-row">
+                <input type="text" value={token} readOnly onFocus={(e) => e.currentTarget.select()} />
+                <button type="button" className="btn btn--sm btn--ghost" onClick={() => void handleCopy()}>
+                  Copy
+                </button>
+              </div>
+              <div className="basic-panel__actions" style={{ marginTop: 8 }}>
+                <button type="button" className="btn btn--sm btn--ghost" onClick={handleGenerate} disabled={saving}>
+                  Regenerate
+                </button>
+                <button type="button" className="btn btn--sm btn--ghost" onClick={handleClearToken} disabled={saving}>
+                  Clear
+                </button>
+              </div>
+              <p className="basic-panel__hint">
+                Share this token with someone you want to invite. They paste it on the “Join existing agent” screen along with the agent ID.
+              </p>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn--sm btn--primary" onClick={handleGenerate} disabled={saving}>
+                Generate share token
+              </button>
+              <p className="basic-panel__hint">No token yet — generate one to let others self-join.</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {error && <p className="basic-panel__error">{error}</p>}
+    </div>
   );
 }
