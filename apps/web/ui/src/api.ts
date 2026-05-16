@@ -415,6 +415,37 @@ export const joinAgent = async (agentId: string, accessToken?: string): Promise<
   return res.json() as Promise<AgentMembership>;
 };
 
+/** Create a new agent owned by the current user. User-authenticated; the
+ *  gateway forces the caller as owner and starts the runner so the agent
+ *  is immediately chattable. */
+export const createAgent = async (input: {
+  agentId: string;
+  name?: string;
+  access?: 'public' | 'protected' | 'private';
+}): Promise<AgentMembership> => {
+  if (!gatewayBase) throw new Error('Gateway URL not set.');
+  const token = await getJwt();
+  const res = await fetch(`${gatewayBase}/api/users/me/agents`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: { message?: string } }).error?.message || `Failed to create agent (${res.status})`);
+  }
+  const created = await res.json() as { agentId: string; name?: string; status: 'running' | 'stopped' };
+  return {
+    agentId: created.agentId,
+    role: 'owner',
+    status: created.status,
+    ...(created.name ? { name: created.name } : {}),
+  };
+};
+
 export const initJwt = (): void => { loadJwt(); };
 
 // ─── WebSocket RPC client ─────────────────────────────────────────────────

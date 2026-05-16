@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import {
+  createAgent,
   exportDeviceKey,
   getDeviceFingerprint,
   getDisplayName,
@@ -32,6 +33,9 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
   const [joinToken, setJoinToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newAgentId, setNewAgentId] = useState('');
+  const [newAgentName, setNewAgentName] = useState('');
   const [tokensOpen, setTokensOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [deviceKeyJson, setDeviceKeyJson] = useState('');
@@ -104,6 +108,28 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
     }
   };
 
+  const handleCreate = async (e: FormEvent): Promise<void> => {
+    e.preventDefault();
+    const id = newAgentId.trim();
+    if (!id) return;
+    setError('');
+    setBusy(true);
+    try {
+      const membership = await createAgent({
+        agentId: id,
+        ...(newAgentName.trim() ? { name: newAgentName.trim() } : {}),
+      });
+      await onPick({
+        gatewayUrl,
+        agentId: membership.agentId,
+        role: membership.role,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="center-screen">
       <div className="card card--form" style={{ maxWidth: 520 }}>
@@ -131,16 +157,7 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
             <h3 className="pick-empty__title">No agents yet</h3>
             <p className="hint">
               An OpenHermit agent is a persistent AI assistant with its own memory, abilities, and
-              workspace. You'll need an <strong>agent ID</strong> from your administrator (or
-              create one yourself with <code>hermit agents create &lt;id&gt;</code>), then join it
-              below.
-            </p>
-            <p className="hint">
-              Try the default starter ID: <button
-                type="button"
-                className="link-btn"
-                onClick={() => { setJoinAgentId('main'); setJoinOpen(true); }}
-              >main</button>
+              workspace. Create your first agent below, or join one an admin has shared with you.
             </p>
           </div>
         )}
@@ -177,14 +194,24 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
         )}
 
         {!joinOpen ? (
-          <button
-            className="btn btn--ghost btn--full"
-            type="button"
-            onClick={() => setJoinOpen(true)}
-            style={{ marginTop: 16 }}
-          >
-            + Join another agent
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button
+              className="btn btn--primary"
+              type="button"
+              onClick={() => { setCreateOpen(true); setJoinOpen(false); }}
+              style={{ flex: 1 }}
+            >
+              + Create new agent
+            </button>
+            <button
+              className="btn btn--ghost"
+              type="button"
+              onClick={() => { setJoinOpen(true); setCreateOpen(false); }}
+              style={{ flex: 1 }}
+            >
+              Join existing
+            </button>
+          </div>
         ) : (
           <>
             <h3 style={{ fontSize: 13, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 24, marginBottom: 8 }}>
@@ -238,6 +265,64 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                   style={{ flex: 1 }}
                 >
                   {busy ? 'Joining...' : 'Join'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+
+        {createOpen && (
+          <>
+            <h3 style={{ fontSize: 13, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 24, marginBottom: 8 }}>
+              Create a new agent
+            </h3>
+            <form onSubmit={handleCreate}>
+              <label className="field">
+                <span className="field__label">Agent ID</span>
+                <input
+                  className="field__input"
+                  type="text"
+                  placeholder="e.g. research-bot"
+                  pattern="[a-zA-Z0-9_-]+"
+                  required
+                  autoFocus
+                  value={newAgentId}
+                  onChange={(e) => setNewAgentId(e.target.value)}
+                />
+                <span className="field__help">
+                  Stable identifier — letters, numbers, dashes, underscores. Can't be changed later.
+                </span>
+              </label>
+              <label className="field">
+                <span className="field__label">Display name (optional)</span>
+                <input
+                  className="field__input"
+                  type="text"
+                  placeholder="e.g. Research Bot"
+                  value={newAgentName}
+                  onChange={(e) => setNewAgentName(e.target.value)}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    setNewAgentId('');
+                    setNewAgentName('');
+                  }}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn--primary"
+                  type="submit"
+                  disabled={!newAgentId.trim() || busy}
+                  style={{ flex: 1 }}
+                >
+                  {busy ? 'Creating...' : 'Create agent'}
                 </button>
               </div>
             </form>

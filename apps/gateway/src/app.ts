@@ -464,6 +464,38 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     });
 
     /**
+     * Create a new agent owned by the calling user. User-authenticated
+     * (no admin token required) — anyone with a valid device-key JWT can
+     * spin up an agent on this gateway, becoming its owner. After
+     * creation the runner is started so the agent is immediately usable
+     * from the web UI.
+     *
+     * Body: { agentId, name?, sandbox?, access? } — same shape as the
+     * admin route, but `ownerUserId` is ignored (always the caller).
+     */
+    app.post('/api/users/me/agents', async (c) => {
+      const auth = requireAuth(c);
+      if (auth.mode !== 'user') throw new UnauthorizedError('User JWT required.');
+      if (!userStore) {
+        throw new OpenHermitError('User store is not configured.', 'not_configured', 500);
+      }
+      const userId = await userStore.resolve(auth.channel, auth.channelUserId);
+      if (!userId) throw new UnauthorizedError('Unknown user.');
+
+      const body = await c.req.json<CreateAgentRequest>().catch(() => ({} as CreateAgentRequest));
+      const created = await createAgentImpl(body, { ownerOverride: userId });
+
+      // Start the runner so chat works without a separate lifecycle call.
+      try {
+        await instances.start(created.agentId, created.workspaceDir);
+      } catch (err) {
+        log(`agent ${created.agentId} created but failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        return c.json({ ...created, status: 'stopped' as const }, 201);
+      }
+      return c.json({ ...created, status: 'running' as const }, 201);
+    });
+
+    /**
      * Join an agent: assign a user_agents row.
      *
      * Body shapes:
@@ -737,16 +769,32 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     return c.json([]);
   });
 
-  app.post(gatewayRoutes.agents, async (c) => {
-    requireAdmin(c.req.header('authorization'));
+  /**
+   * Shared agent-creation implementation. Used by both the admin POST
+   * /api/agents route and the user-auth POST /api/users/me/agents route
+   * (which forces ownerUserId to the caller and starts the runner so the
+   * agent is immediately chattable from the web UI).
+   *
+   * Throws ValidationError / conflict-style HTTP errors that the route
+   * handlers either rethrow or convert into the appropriate response.
+   * Returns the created record on success.
+   *
+   * `ownerOverride` (when provided) wins over any ownerUserId in the
+   * request body — used by the user route so a logged-in user can't
+   * accidentally assign ownership to someone else.
+   */
+  const createAgentImpl = async (
+    body: CreateAgentRequest,
+    opts: { ownerOverride?: string } = {},
+  ): Promise<{ agentId: string; name?: string; workspaceDir: string }> => {
     if (!agentStore) {
-      return c.json(
-        { error: { code: 'not_configured', message: 'Agent store is not configured. Set DATABASE_URL to enable agent persistence.' } },
-        501,
+      // Caller should pre-check; surface as 500 if they don't.
+      throw new OpenHermitError(
+        'Agent store is not configured. Set DATABASE_URL to enable agent persistence.',
+        'not_configured',
+        500,
       );
     }
-
-    const body = await c.req.json<CreateAgentRequest>();
 
     if (!body.agentId || typeof body.agentId !== 'string') {
       throw new ValidationError('agentId is required and must be a string.');
@@ -754,8 +802,9 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
 
     const existing = await agentStore.get(body.agentId);
     if (existing) {
-      return c.json(
-        { error: { code: 'conflict', message: `Agent already exists: ${body.agentId}` } },
+      throw new OpenHermitError(
+        `Agent already exists: ${body.agentId}`,
+        'conflict',
         409,
       );
     }
@@ -889,20 +938,33 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
       },
     ], now);
 
-    // Assign owner if specified
-    if (body.ownerUserId && typeof body.ownerUserId === 'string') {
-      await agentStore.assignOwner(record.agentId, body.ownerUserId, now);
-      log(`agent created: ${record.agentId} (owner: ${body.ownerUserId})`);
+    // Assign owner: explicit override wins, otherwise honor the body.
+    const ownerUserId = opts.ownerOverride ?? body.ownerUserId;
+    if (ownerUserId && typeof ownerUserId === 'string') {
+      await agentStore.assignOwner(record.agentId, ownerUserId, now);
+      log(`agent created: ${record.agentId} (owner: ${ownerUserId})`);
     } else {
       log(`agent created: ${record.agentId}`);
     }
 
-    return c.json({
+    return {
       agentId: record.agentId,
-      status: 'stopped' as const,
       ...(record.name ? { name: record.name } : {}),
       workspaceDir: record.workspaceDir,
-    }, 201);
+    };
+  };
+
+  app.post(gatewayRoutes.agents, async (c) => {
+    requireAdmin(c.req.header('authorization'));
+    if (!agentStore) {
+      return c.json(
+        { error: { code: 'not_configured', message: 'Agent store is not configured. Set DATABASE_URL to enable agent persistence.' } },
+        501,
+      );
+    }
+    const body = await c.req.json<CreateAgentRequest>();
+    const created = await createAgentImpl(body);
+    return c.json({ ...created, status: 'stopped' as const }, 201);
   });
 
   // --- agent health ---
