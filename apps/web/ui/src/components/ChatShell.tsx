@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AgentWsClient, fetchAgentInfo, getDisplayName, getUserId, type Connection, type SessionSummary, type HistoryMessage, type OutboundEvent } from '../api';
+import { AgentWsClient, fetchAgentConfig, fetchAgentInfo, fetchAgentSecrets, getDisplayName, getUserId, type Connection, type SessionSummary, type HistoryMessage, type OutboundEvent } from '../api';
+import { providerHasKey, candidateSecretNames } from '../providerKey';
 import { SessionList } from './SessionList';
 import { ChatMessages, type ChatItem } from './ChatMessages';
 import { Composer } from './Composer';
@@ -77,6 +78,33 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
 
   const [pendingComposerText, setPendingComposerText] = useState<string>('');
   const [tourActive, setTourActive] = useState<boolean>(() => !isTourCompleted());
+
+  // Provider-key gating: if the active model's API key isn't in the
+  // agent's secrets, surface an inline banner so users don't silently
+  // hit a 401 on first send. Owner-only since only owners can fix it.
+  const [missingKey, setMissingKey] = useState<{ provider: string; secretName: string } | null>(null);
+  const refreshMissingKey = useCallback(async () => {
+    if (!isOwner) { setMissingKey(null); return; }
+    try {
+      const [config, secrets] = await Promise.all([
+        fetchAgentConfig().catch(() => null),
+        fetchAgentSecrets().catch(() => ({} as Record<string, string>)),
+      ]);
+      const provider = (config as { model?: { provider?: string } } | null)?.model?.provider?.trim();
+      if (!provider) { setMissingKey(null); return; }
+      if (providerHasKey(provider, secrets)) { setMissingKey(null); return; }
+      setMissingKey({ provider, secretName: candidateSecretNames(provider)[0]! });
+    } catch {
+      setMissingKey(null);
+    }
+  }, [isOwner]);
+
+  // Re-check missing-key state whenever the user returns to the chat
+  // view from Manage (e.g. they just added the secret). Cheap — two
+  // small cached fetches.
+  useEffect(() => {
+    if (view === 'chat') void refreshMissingKey();
+  }, [view, refreshMissingKey]);
 
   currentSessionRef.current = currentSessionId;
 
@@ -475,6 +503,7 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
         const [list] = await Promise.all([
           client.listSessions(),
           fetchAgentInfo().then(info => setAgentName(info.name)).catch(() => {}),
+          refreshMissingKey(),
         ]);
         setSessions(list);
         // Only auto-load when the URL itself names a valid session.
@@ -724,12 +753,44 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
                 <span>Read-only — this session was created via {currentSession.source?.platform || currentSession.source?.kind || 'another channel'}</span>
               </div>
             ) : (
-              <Composer
-                onSend={sendMessage}
-                disabled={sending || !currentSessionId}
-                pendingText={pendingComposerText}
-                onConsumePendingText={() => setPendingComposerText('')}
-              />
+              <>
+                {missingKey && (
+                  <div
+                    role="alert"
+                    style={{
+                      margin: '0 12px 8px',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      background: 'var(--warning-bg, #fef3c7)',
+                      color: 'var(--warning, #92400e)',
+                      border: '1px solid var(--warning-border, #fde68a)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      fontSize: 13,
+                    }}
+                  >
+                    <Icon name="alert-triangle" size={16} />
+                    <span style={{ flex: 1 }}>
+                      <strong>{missingKey.provider}</strong> needs an API key. Add{' '}
+                      <code>{missingKey.secretName}</code> under Secrets before chatting.
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--primary"
+                      onClick={() => { setView('manage'); setManageTab('secrets'); }}
+                    >
+                      Add key →
+                    </button>
+                  </div>
+                )}
+                <Composer
+                  onSend={sendMessage}
+                  disabled={sending || !currentSessionId}
+                  pendingText={pendingComposerText}
+                  onConsumePendingText={() => setPendingComposerText('')}
+                />
+              </>
             )}
           </>
         )}

@@ -9,24 +9,7 @@ import {
   type AgentConfig,
   type ProviderCatalogEntry,
 } from '../api';
-
-/**
- * Convention pi-ai uses to look up an API key for a provider:
- * `<UPPERCASE_NAME>_API_KEY`, with non-alphanumerics replaced by `_`.
- * A few providers have curated alternate names (e.g. google).
- */
-const candidateSecretNames = (provider: string): string[] => {
-  const upper = provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_API_KEY';
-  const extras: Record<string, string[]> = {
-    google: ['GOOGLE_API_KEY', 'GEMINI_API_KEY'],
-  };
-  return extras[provider] ?? [upper];
-};
-
-const providerHasKey = (
-  provider: string,
-  secrets: Record<string, string>,
-): boolean => candidateSecretNames(provider).some((name) => Boolean(secrets[name]));
+import { candidateSecretNames, providerHasKey } from '../providerKey';
 
 type Thinking = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 

@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import {
   createAgent,
+  deleteAgent,
   exportDeviceKey,
+  fetchProviderCatalog,
   getDeviceFingerprint,
   getDisplayName,
   getJwt,
@@ -11,6 +13,7 @@ import {
   listMyAgents,
   type AgentMembership,
   type Connection,
+  type ProviderCatalogEntry,
 } from '../api';
 
 interface Props {
@@ -36,6 +39,9 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [newAgentId, setNewAgentId] = useState('');
   const [newAgentName, setNewAgentName] = useState('');
+  const [newProvider, setNewProvider] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [deviceKeyJson, setDeviceKeyJson] = useState('');
@@ -52,6 +58,47 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
   };
 
   useEffect(() => { void refresh(); }, []);
+
+  // Lazy-load provider catalog the first time the create form opens so
+  // users can pick a model up front instead of editing Manage → Basic.
+  useEffect(() => {
+    if (!createOpen || providerCatalog.length > 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cat = await fetchProviderCatalog();
+        if (cancelled) return;
+        setProviderCatalog(cat);
+        if (cat.length > 0) {
+          // Default to first provider + its first model (template typically
+          // ships openrouter+claude, which is fine — but we surface the
+          // dropdown so users know they can switch).
+          const firstProvider = cat[0]!;
+          setNewProvider((prev) => prev || firstProvider.provider);
+          if (firstProvider.models.length > 0) {
+            setNewModel((prev) => prev || firstProvider.models[0]!.id);
+          }
+        }
+      } catch (err) {
+        // Non-fatal — user can still create with template defaults.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load provider catalog:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [createOpen, providerCatalog.length]);
+
+  // When the selected provider changes, snap the model selector to that
+  // provider's first model so we never submit a stale (provider, model)
+  // pair that doesn't match.
+  useEffect(() => {
+    if (!newProvider) return;
+    const entry = providerCatalog.find((p) => p.provider === newProvider);
+    if (!entry || entry.models.length === 0) return;
+    if (!entry.models.some((m) => m.id === newModel)) {
+      setNewModel(entry.models[0]!.id);
+    }
+  }, [newProvider, providerCatalog, newModel]);
 
   const openTokens = async (): Promise<void> => {
     setTokensOpen((v) => !v);
@@ -88,6 +135,24 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
     }
   };
 
+  const handleDelete = async (m: AgentMembership, e: React.MouseEvent): Promise<void> => {
+    e.stopPropagation();
+    const label = m.name ? `${m.name} (${m.agentId})` : m.agentId;
+    if (!window.confirm(
+      `Delete agent ${label}?\n\nThis permanently removes its sessions, channels, secrets, memories, and all members. This cannot be undone.`,
+    )) return;
+    setError('');
+    setBusy(true);
+    try {
+      await deleteAgent(m.agentId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleJoin = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     const id = joinAgentId.trim();
@@ -118,6 +183,14 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
       const membership = await createAgent({
         agentId: id,
         ...(newAgentName.trim() ? { name: newAgentName.trim() } : {}),
+        ...((newProvider.trim() || newModel.trim())
+          ? {
+              model: {
+                ...(newProvider.trim() ? { provider: newProvider.trim() } : {}),
+                ...(newModel.trim() ? { model: newModel.trim() } : {}),
+              },
+            }
+          : {}),
       });
       await onPick({
         gatewayUrl,
@@ -179,14 +252,44 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                   <strong>{m.name ?? m.agentId}</strong>
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>{m.agentId} · {m.role}</span>
                 </span>
-                <span style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: m.status === 'running' ? 'var(--success-bg, #dcfce7)' : 'var(--surface, #f4f4f5)',
-                  color: m.status === 'running' ? 'var(--success, #166534)' : 'var(--muted)',
-                }}>
-                  {m.status}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: m.status === 'running' ? 'var(--success-bg, #dcfce7)' : 'var(--surface, #f4f4f5)',
+                    color: m.status === 'running' ? 'var(--success, #166534)' : 'var(--muted)',
+                  }}>
+                    {m.status}
+                  </span>
+                  {m.role === 'owner' && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      title="Delete agent"
+                      aria-label={`Delete ${m.name ?? m.agentId}`}
+                      onClick={(e) => void handleDelete(m, e)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          void handleDelete(m, e as unknown as React.MouseEvent);
+                        }
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 24,
+                        height: 24,
+                        borderRadius: 6,
+                        color: 'var(--muted)',
+                        cursor: busy ? 'not-allowed' : 'pointer',
+                        opacity: busy ? 0.4 : 0.7,
+                      }}
+                    >
+                      <Icon name="trash" size={14} />
+                    </span>
+                  )}
                 </span>
               </button>
             ))}
@@ -303,6 +406,40 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                   onChange={(e) => setNewAgentName(e.target.value)}
                 />
               </label>
+              {providerCatalog.length > 0 && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <label className="field" style={{ flex: 1 }}>
+                    <span className="field__label">Provider</span>
+                    <select
+                      className="field__input"
+                      value={newProvider}
+                      onChange={(e) => setNewProvider(e.target.value)}
+                    >
+                      {providerCatalog.map((p) => (
+                        <option key={p.provider} value={p.provider}>{p.provider}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field" style={{ flex: 2 }}>
+                    <span className="field__label">Model</span>
+                    <select
+                      className="field__input"
+                      value={newModel}
+                      onChange={(e) => setNewModel(e.target.value)}
+                    >
+                      {(providerCatalog.find((p) => p.provider === newProvider)?.models ?? []).map((m) => (
+                        <option key={m.id} value={m.id}>{m.id}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+              {providerCatalog.length > 0 && (
+                <p className="hint" style={{ marginTop: -4, marginBottom: 8 }}>
+                  You can change this anytime under Manage → Basic. You'll still need to add the
+                  provider's API key under Manage → Secrets before chatting.
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   className="btn btn--ghost"

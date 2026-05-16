@@ -496,6 +496,38 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
     });
 
     /**
+     * Delete an agent. Owner-or-admin only. Auto-stops the runner if
+     * it's running so callers don't need a separate stop step. Wipes
+     * the agent record and all dependent rows (sessions, channels,
+     * secrets, memberships, etc.) via agentStore.delete cascade.
+     */
+    app.delete('/api/agents/:agentId', async (c) => {
+      const agentId = c.req.param('agentId') ?? '';
+      const auth = requireAuth(c, agentId);
+      if (!agentStore) {
+        throw new OpenHermitError('Agent store is not configured.', 'not_configured', 500);
+      }
+      const record = await agentStore.get(agentId);
+      if (!record) throw new NotFoundError(`Agent not found: ${agentId}`);
+
+      if (auth.mode !== 'admin') {
+        if (auth.mode !== 'user') throw new UnauthorizedError('User JWT or admin token required.');
+        if (!userStore) throw new OpenHermitError('User store is not configured.', 'not_configured', 500);
+        const callerUserId = await userStore.resolve(auth.channel, auth.channelUserId);
+        if (!callerUserId) throw new UnauthorizedError('Unknown user.');
+        const role = await userStore.getAgentRole({ agentId }, callerUserId);
+        if (role !== 'owner') throw new UnauthorizedError('Owner role required.');
+      }
+
+      if (instances.getRunner(agentId)) {
+        await instances.stop(agentId);
+      }
+      await agentStore.delete(agentId);
+      log(`agent deleted: ${agentId}`);
+      return c.json({ agentId, status: 'deleted' as const });
+    });
+
+    /**
      * Join an agent: assign a user_agents row.
      *
      * Body shapes:
@@ -828,6 +860,22 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
       );
     }
     const templateConfig = buildDefaultAgentConfig(record.workspaceDir);
+    // Apply optional model overrides from the create request so the agent
+    // is immediately chattable in the right provider/model without a
+    // follow-up Manage → Basic edit.
+    if (body.model && typeof body.model === 'object') {
+      const cfg = templateConfig as unknown as { model?: Record<string, unknown> };
+      cfg.model = { ...(cfg.model ?? {}) };
+      if (typeof body.model.provider === 'string' && body.model.provider.trim()) {
+        cfg.model.provider = body.model.provider.trim();
+      }
+      if (typeof body.model.model === 'string' && body.model.model.trim()) {
+        cfg.model.model = body.model.model.trim();
+        // Drop template fallbacks — they're usually provider-specific
+        // and wouldn't make sense for a swapped provider.
+        delete cfg.model.fallbacks;
+      }
+    }
     if (
       body.access !== undefined &&
       body.access !== 'public' &&
@@ -1020,7 +1068,7 @@ export const createGatewayApp = (options: GatewayAppOptions): Hono => {
 
       case 'delete': {
         if (instances.getRunner(agentId)) {
-          throw new ValidationError(`Agent ${agentId} is still running. Stop it first.`);
+          await instances.stop(agentId);
         }
         await agentStore.delete(agentId);
         log(`agent deleted: ${agentId}`);

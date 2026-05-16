@@ -237,6 +237,17 @@ export interface CreateAgentRequest {
    * access_token afterwards via the security policy endpoint.
    */
   access?: 'public' | 'protected' | 'private';
+  /**
+   * Optional initial model selection. Overrides the template's
+   * `model.provider` / `model.name` defaults before the config is
+   * written, so the agent is immediately chattable without a separate
+   * Manage → Basic edit. Used by the web "Create agent" dialog so
+   * first-time users can pick a model up front.
+   */
+  model?: {
+    provider?: string;
+    model?: string;
+  };
 }
 
 export const gatewayRoutes = {

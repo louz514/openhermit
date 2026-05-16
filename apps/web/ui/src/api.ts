@@ -422,6 +422,7 @@ export const createAgent = async (input: {
   agentId: string;
   name?: string;
   access?: 'public' | 'protected' | 'private';
+  model?: { provider?: string; model?: string };
 }): Promise<AgentMembership> => {
   if (!gatewayBase) throw new Error('Gateway URL not set.');
   const token = await getJwt();
@@ -444,6 +445,22 @@ export const createAgent = async (input: {
     status: created.status,
     ...(created.name ? { name: created.name } : {}),
   };
+};
+
+/** Delete an agent (owner-or-admin). Auto-stops the runner if it's
+ *  running. Wipes all dependent rows (sessions, channels, secrets,
+ *  memberships, etc.) via the gateway's agentStore cascade. */
+export const deleteAgent = async (agentId: string): Promise<void> => {
+  if (!gatewayBase) throw new Error('Gateway URL not set.');
+  const token = await getJwt();
+  const res = await fetch(`${gatewayBase}/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: { message?: string } }).error?.message || `Failed to delete agent (${res.status})`);
+  }
 };
 
 export const initJwt = (): void => { loadJwt(); };
