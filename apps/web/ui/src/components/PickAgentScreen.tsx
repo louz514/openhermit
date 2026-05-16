@@ -70,13 +70,15 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
         if (cancelled) return;
         setProviderCatalog(cat);
         if (cat.length > 0) {
-          // Default to first provider + its first model (template typically
-          // ships openrouter+claude, which is fine — but we surface the
-          // dropdown so users know they can switch).
-          const firstProvider = cat[0]!;
-          setNewProvider((prev) => prev || firstProvider.provider);
-          if (firstProvider.models.length > 0) {
-            setNewModel((prev) => prev || firstProvider.models[0]!.id);
+          // Prefer the providers most users actually configure first,
+          // falling back to alphabetical order from the catalog.
+          const preferredOrder = ['openrouter', 'openai', 'anthropic', 'google'];
+          const pick =
+            preferredOrder.map((p) => cat.find((c) => c.provider === p)).find((c): c is ProviderCatalogEntry => Boolean(c))
+            ?? cat[0]!;
+          setNewProvider((prev) => prev || pick.provider);
+          if (pick.models.length > 0) {
+            setNewModel((prev) => prev || pick.models[0]!.id);
           }
         }
       } catch (err) {
@@ -408,10 +410,11 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
               </label>
               {providerCatalog.length > 0 && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <label className="field" style={{ flex: 1 }}>
+                  <label className="field" style={{ flex: 1, minWidth: 0 }}>
                     <span className="field__label">Provider</span>
                     <select
                       className="field__input"
+                      style={{ width: '100%' }}
                       value={newProvider}
                       onChange={(e) => setNewProvider(e.target.value)}
                     >
@@ -420,10 +423,11 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                       ))}
                     </select>
                   </label>
-                  <label className="field" style={{ flex: 2 }}>
+                  <label className="field" style={{ flex: 1, minWidth: 0 }}>
                     <span className="field__label">Model</span>
                     <select
                       className="field__input"
+                      style={{ width: '100%' }}
                       value={newModel}
                       onChange={(e) => setNewModel(e.target.value)}
                     >
