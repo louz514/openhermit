@@ -868,6 +868,21 @@ export const fetchAgentSecurity = () => apiFetch<AgentSecurityPolicy>('/security
 export const putAgentSecurity = (policy: AgentSecurityPolicy) =>
   apiFetch<{ ok: boolean }>('/security', { method: 'PUT', body: policy });
 
+// Members — owners can list everyone with access to the agent.
+export interface AgentMemberIdentity {
+  channel: string;
+  channelUserId: string;
+  createdAt: string;
+}
+export interface AgentMemberInfo {
+  userId: string;
+  role: 'owner' | 'user' | 'guest';
+  createdAt: string;
+  displayName?: string;
+  identities: AgentMemberIdentity[];
+}
+export const fetchAgentMembers = () => apiFetch<AgentMemberInfo[]>('/members');
+
 // Policies
 export interface PolicyInfo {
   id: string;

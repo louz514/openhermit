@@ -537,7 +537,7 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
       });
     }
     if (isOwner) {
-      const tabs: { id: ManageTab; label: string; icon: 'settings' | 'key' | 'message-square' | 'wand' | 'puzzle' | 'clock' | 'shield' }[] = [
+      const tabs: { id: ManageTab; label: string; icon: 'settings' | 'key' | 'message-square' | 'wand' | 'puzzle' | 'clock' | 'shield' | 'users' }[] = [
         { id: 'basic', label: 'Basic', icon: 'settings' },
         { id: 'secrets', label: 'Secrets', icon: 'key' },
         { id: 'channels', label: 'Apps', icon: 'message-square' },
@@ -545,6 +545,7 @@ export function ChatShell({ connection, role, onDisconnect, onGoHome }: Props) {
         { id: 'mcp', label: 'Integrations', icon: 'puzzle' },
         { id: 'schedules', label: 'Tasks', icon: 'clock' },
         { id: 'policies', label: 'Permissions', icon: 'shield' },
+        { id: 'members', label: 'Members', icon: 'users' },
       ];
       for (const t of tabs) {
         out.push({

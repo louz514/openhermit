@@ -12,8 +12,9 @@ const SchedulesPanel = lazy(() => import('./SchedulesPanel').then((m) => ({ defa
 const ChannelsPanel = lazy(() => import('./ChannelsPanel').then((m) => ({ default: m.ChannelsPanel })));
 const PoliciesPanel = lazy(() => import('./PoliciesPanel').then((m) => ({ default: m.PoliciesPanel })));
 const ApprovalsPanel = lazy(() => import('./ApprovalsPanel').then((m) => ({ default: m.ApprovalsPanel })));
+const MembersPanel = lazy(() => import('./MembersPanel').then((m) => ({ default: m.MembersPanel })));
 
-export type ManageTab = 'basic' | 'secrets' | 'skills' | 'mcp' | 'schedules' | 'channels' | 'policies' | 'approvals';
+export type ManageTab = 'basic' | 'secrets' | 'skills' | 'mcp' | 'schedules' | 'channels' | 'policies' | 'members' | 'approvals';
 
 interface TabDef {
   id: ManageTab;
@@ -30,6 +31,7 @@ const tabs: TabDef[] = [
   { id: 'mcp', label: 'Integrations', icon: 'puzzle', description: 'External tool servers (Model Context Protocol) your agent can call out to.' },
   { id: 'schedules', label: 'Tasks', icon: 'clock', description: 'Recurring or one-off jobs the agent runs on a schedule.' },
   { id: 'policies', label: 'Permissions', icon: 'shield', description: 'Control which tools the agent can use, and which require your approval first.' },
+  { id: 'members', label: 'Members', icon: 'users', description: 'People who can chat with this agent, across every channel.' },
   { id: 'approvals', label: 'Pending requests', icon: 'check-circle', description: 'Tool calls waiting for you to approve or deny.' },
 ];
 
@@ -73,6 +75,7 @@ export function ManagePanel({ tab, onTabChange }: Props) {
             {tab === 'schedules' && <SchedulesPanel />}
             {tab === 'channels' && <ChannelsPanel />}
             {tab === 'policies' && <PoliciesPanel />}
+            {tab === 'members' && <MembersPanel />}
             {tab === 'approvals' && <ApprovalsPanel />}
           </Suspense>
         )}
