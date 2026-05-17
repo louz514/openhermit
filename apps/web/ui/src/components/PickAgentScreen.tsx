@@ -388,7 +388,7 @@ export function PickAgentScreen({ gatewayUrl, onPick, onSignOut }: Props) {
                   className="field__input"
                   type="text"
                   placeholder="e.g. research-bot"
-                  pattern="[a-zA-Z0-9_-]+"
+                  pattern="[a-zA-Z0-9_\-]+"
                   required
                   autoFocus
                   value={newAgentId}
