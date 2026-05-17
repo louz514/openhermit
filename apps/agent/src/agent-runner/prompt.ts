@@ -118,6 +118,7 @@ export const buildSystemPrompt = async (
   }
 
   const runtimeLines: string[] = [];
+  runtimeLines.push(`Current date/time (UTC): ${new Date().toISOString()}`);
   if (currentUser?.sessionId) {
     runtimeLines.push(`Current session: \`${currentUser.sessionId}\``);
   }
