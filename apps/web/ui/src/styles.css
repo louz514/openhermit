@@ -2418,6 +2418,264 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 }
 .landing__footer-links a:hover { color: var(--text); }
 
+/* ─── Motion landing additions ─────────────────────────────────────────
+   Companion styles for the animated landing. Class names are scoped to
+   `.landing--motion` where the existing markup would otherwise clash. */
+
+/* Nav: backdrop alpha is driven by a motion value (--nav-bg-alpha 0→1). */
+.landing--motion .landing__nav--sticky {
+  background: color-mix(
+    in srgb,
+    var(--bg) calc(60% + 28% * var(--nav-bg-alpha, 0)),
+    transparent
+  );
+  border-bottom-color: color-mix(in srgb, var(--line) calc(40% + 60% * var(--nav-bg-alpha, 0)), transparent);
+  transition: border-bottom-color 0.3s ease;
+}
+
+/* Hero: replace the existing ::before glow with a layered, parallax-able
+   background div so we can transform it on scroll. */
+.landing--motion .landing__hero {
+  overflow: hidden;
+  min-height: min(820px, 100vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 120px;
+  padding-bottom: 80px;
+}
+.landing--motion .landing__hero::before { display: none; }
+
+/* Page-level fixed wrapper for the three.js constellation scene
+   (ParticlesBackground.tsx). Spans the entire viewport so the scene
+   flows continuously across the page as the user scrolls — not just
+   the hero section. Pointer-events off so it never intercepts clicks. */
+.landing__bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Subtle top/bottom fade so the scene blends into the page chrome. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%);
+}
+.landing__bg-fx .landing__particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.landing__bg-fx canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+/* Everything inside .landing must stack above the fixed bg. */
+.landing > *:not(.landing__bg-fx) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Subtle grid pattern sitting above the mesh, below content. */
+.landing--motion .landing__hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+  opacity: 0.55;
+}
+
+.landing__hero-inner { position: relative; z-index: 1; }
+
+/* Title accent underline (Masking-style scale-x reveal). */
+.landing__title-accent { position: relative; display: inline-block; }
+.landing__title-underline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 6px;
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 4px;
+  transform-origin: left center;
+  z-index: -1;
+}
+
+/* Cloning chips under the hero CTA. */
+.landing__hero-chips {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 auto 24px;
+}
+.landing__hero-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  min-width: 110px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+.landing__hero-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+/* Stack crossfading labels in the same spot so the chip never resizes. */
+.landing__hero-chip-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: opacity, transform, filter;
+}
+
+/* Logo as easter-egg button — keeps the image flush, no chrome. */
+.landing__logo-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.landing__logo-btn:hover { transform: rotate(-6deg) scale(1.06); }
+.landing__logo-btn:active { transform: rotate(-12deg) scale(0.96); }
+.landing__logo-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+/* Code block wrapper with a hover-revealed Copy button. */
+.landing__code-wrap {
+  position: relative;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.landing__code-wrap.landing__code--wide { max-width: 820px; }
+.landing__code-wrap .landing__code { max-width: none; margin: 0; }
+.landing__code-copy {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 180ms ease, transform 180ms ease,
+    border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+.landing__code-wrap:hover .landing__code-copy,
+.landing__code-copy:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.landing__code-copy:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  color: var(--text);
+}
+.landing__code-copy.is-copied {
+  opacity: 1;
+  transform: translateY(0);
+  border-color: color-mix(in srgb, var(--accent) 80%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  color: var(--text);
+}
+
+/* Masked, line-by-line code reveal. */
+.landing__code-line {
+  display: inline-block;
+  width: 100%;
+  will-change: clip-path;
+}
+.landing__code-caret {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Dolly + dimensionality stage for the fleet code block. */
+.landing__dolly {
+  perspective: 1200px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+.landing__dolly-stage {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* CTA overlay sweep (Principle 7). */
+.landing__cta-section { position: relative; overflow: hidden; }
+.landing__cta-sweep {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  height: 220px;
+  transform: translate(-50%, -50%);
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 30%,
+    color-mix(in srgb, var(--accent-strong) 18%, transparent) 70%,
+    transparent 100%
+  );
+  filter: blur(40px);
+  border-radius: 220px;
+  z-index: 0;
+  pointer-events: none;
+}
+.landing__cta-section > *:not(.landing__cta-sweep) { position: relative; z-index: 1; }
+
+/* Respect reduced-motion: kill non-essential transforms. */
+@media (prefers-reduced-motion: reduce) {
+  .landing--motion *,
+  .landing--motion *::before,
+  .landing--motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .landing__cta-sweep,
+  .landing__dolly-stage {
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
 @media (max-width: 720px) {
   .landing__nav { padding: 12px 18px; }
   .landing__nav-links { gap: 12px; }

@@ -280,6 +280,12 @@ Issues, PRs, design discussions, channel adapters, skills, MCP integrations, doc
 
 ---
 
+## Acknowledgements
+
+- Landing-page particle background is a local three.js port inspired by [Casberry's AI Particle Simulator](https://particles.casberry.in/) — shader ideas (SPARK / PLASMA / INK / GLASS / CYBER) reimplemented from scratch with our own theming.
+
+---
+
 ## License
 
 MIT © [William Wang](https://github.com/williamwa)
